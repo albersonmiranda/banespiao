@@ -1,0 +1,281 @@
+@use 'variables' as *;
+@use 'sass:math';
+
+// Flexbox utilities
+@mixin flex-center {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+@mixin flex-between {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+@mixin flex-col($gap: $space-3) {
+  display: flex;
+  flex-direction: column;
+  gap: $gap;
+}
+
+// Card base
+@mixin card {
+  background: $color-bg-secondary;
+  border: 1px solid $color-border-light;
+  border-radius: $radius-lg;
+  box-shadow: $shadow-sm;
+}
+
+@mixin card-hover {
+  @include card;
+  transition: box-shadow $transition-normal, border-color $transition-normal;
+
+  &:hover {
+    box-shadow: $shadow-md;
+    border-color: $color-border-medium;
+  }
+}
+
+// Button base
+@mixin button-base {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: $space-2;
+  padding: 0 $space-4;
+  height: $btn-height;
+  font-size: $font-size-sm;
+  font-weight: $font-weight-medium;
+  line-height: 1;
+  border: none;
+  border-radius: $radius-md;
+  cursor: pointer;
+  transition: all $transition-fast;
+  white-space: nowrap;
+
+  &:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+}
+
+@mixin button-primary {
+  @include button-base;
+  background: $color-primary;
+  color: $color-primary-contrast;
+
+  &:hover:not(:disabled) {
+    background: $color-primary-dark;
+  }
+
+  &:active:not(:disabled) {
+    background: $color-primary-dark;
+    transform: scale(0.98);
+  }
+}
+
+@mixin button-secondary {
+  @include button-base;
+  background: $color-bg-tertiary;
+  color: $color-text-primary;
+  border: 1px solid $color-border-light;
+
+  &:hover:not(:disabled) {
+    background: $color-bg-hover;
+    border-color: $color-border-medium;
+  }
+}
+
+@mixin button-danger {
+  @include button-base;
+  background: $color-danger;
+  color: $color-primary-contrast;
+
+  &:hover:not(:disabled) {
+    background: $color-danger-dark;
+  }
+}
+
+@mixin button-ghost {
+  @include button-base;
+  background: transparent;
+  color: $color-text-secondary;
+
+  &:hover:not(:disabled) {
+    background: $color-bg-tertiary;
+    color: $color-text-primary;
+  }
+}
+
+@mixin button-sm {
+  @include button-base;
+  height: $btn-height-sm;
+  padding: 0 $space-3;
+  font-size: $font-size-xs;
+}
+
+// Form controls
+@mixin input-base {
+  width: 100%;
+  height: $input-height;
+  padding: 0 $space-3;
+  font-size: $font-size-sm;
+  font-family: inherit;
+  color: $color-text-primary;
+  background: $color-bg-secondary;
+  border: 1px solid $color-border-light;
+  border-radius: $radius-md;
+  transition: border-color $transition-fast, box-shadow $transition-fast;
+
+  &::placeholder {
+    color: $color-text-tertiary;
+  }
+
+  &:hover:not(:disabled):not([readonly]) {
+    border-color: $color-border-medium;
+  }
+
+  &:focus {
+    outline: none;
+    border-color: $color-border-focus;
+    box-shadow: 0 0 0 3px $color-primary / 0.15;
+  }
+
+  &:disabled,
+  &[readonly] {
+    background: $color-bg-tertiary;
+    color: $color-text-tertiary;
+    cursor: not-allowed;
+  }
+}
+
+@mixin label-base {
+  display: block;
+  font-size: $font-size-xs;
+  font-weight: $font-weight-medium;
+  color: $color-text-secondary;
+  margin-bottom: $space-1;
+}
+
+@mixin form-group {
+  @include flex-col($space-1);
+}
+
+// Loading spinner
+@mixin spinner($size: 20px, $color: $color-primary) {
+  width: $size;
+  height: $size;
+  border: 2px solid math.div($color, 5);
+  border-top-color: $color;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+// Truncate text
+@mixin truncate($lines: 1) {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: -webkit-box;
+  -webkit-line-clamp: $lines;
+  -webkit-box-orient: vertical;
+}
+
+// Focus visible
+@mixin focus-visible {
+  &:focus:not(:focus-visible) {
+    outline: none;
+  }
+  &:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 3px math.div($color-primary, 3.33);
+    border-radius: $radius-sm;
+  }
+}
+
+// Scrollbar styling
+@mixin scrollbar-thin {
+  scrollbar-width: thin;
+  scrollbar-color: $color-border-medium transparent;
+
+  &::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  &::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  &::-webkit-scrollbar-thumb {
+    background-color: $color-border-medium;
+    border-radius: $radius-full;
+  }
+  &::-webkit-scrollbar-thumb:hover {
+    background-color: $color-text-tertiary;
+  }
+}
+
+// Empty state
+@mixin empty-state {
+  @include flex-col($space-3);
+  padding: $space-10 $space-4;
+  text-align: center;
+  color: $color-text-tertiary;
+
+  svg {
+    width: 48px;
+    height: 48px;
+    color: $color-text-tertiary;
+    opacity: 0.6;
+  }
+
+  p {
+    margin: 0;
+    font-size: $font-size-sm;
+    color: $color-text-secondary;
+  }
+}
+
+// Badge
+@mixin badge($bg: $color-primary, $color: $color-primary-contrast) {
+  display: inline-flex;
+  align-items: center;
+  padding: $space-1 $space-2;
+  font-size: $font-size-xs;
+  font-weight: $font-weight-medium;
+  line-height: 1;
+  color: $color;
+  background: $bg;
+  border-radius: $radius-full;
+}
+
+// Responsive
+@mixin media-sm {
+  @media (min-width: $bp-sm) { @content; }
+}
+@mixin media-md {
+  @media (min-width: $bp-md) { @content; }
+}
+@mixin media-lg {
+  @media (min-width: $bp-lg) { @content; }
+}
+@mixin media-xl {
+  @media (min-width: $bp-xl) { @content; }
+}
+
+@mixin max-width-sm {
+  @media (max-width: #{$bp-sm - 1px}) { @content; }
+}
+@mixin max-width-md {
+  @media (max-width: #{$bp-md - 1px}) { @content; }
+}
+@mixin max-width-lg {
+  @media (max-width: #{$bp-lg - 1px}) { @content; }
+}
+@mixin max-width-xl {
+  @media (max-width: #{$bp-xl - 1px}) { @content; }
+}
