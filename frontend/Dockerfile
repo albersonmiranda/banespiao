@@ -11,5 +11,5 @@ FROM nginx:1.30.4-alpine
 RUN rm -rf /usr/share/nginx/html/*
 COPY --from=build /app/dist/frontend/browser /usr/share/nginx/html
 COPY default.conf.template /etc/nginx/templates/default.conf.template
-ENV NGINX_ENVSUBST_FILTER=^BACKEND_HOST$ BACKEND_HOST=backend
+ENV NGINX_ENVSUBST_FILTER=^BACKEND_URL$ BACKEND_URL=http://backend:8000
 EXPOSE 80
