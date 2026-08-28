@@ -4,7 +4,51 @@
 
 Protótipo para plataforma de monitoramento de vegetação por imagens de satélite. Permite upload de áreas via KML, cálculo de séries temporais de NDVI e obtenção de imagens de satélite em cores verdadeiras a partir do Copernicus Data Space Ecosystem (CDSE) e Instituto Nacional de Pesquisas Espaciais (INPE).
 
+## Funcionalidades
+
+### Mapa e série temporal de NDVI
+
+Após importação do `.kml`, a área é plotada no mapa Leaflet. O usuário pode então obter a série temporal de NDVI diretamente da API do Copernicus Data Space Ecosystem (CDSE), podendo escolher:
+
+- Intervalo de datas
+- Satélites
+  - Sentinel 2
+  - Landsat 8-9
+- Resolução
+  - 10m
+  - 20m
+  - 30m
+  - 100m
+- Agregação
+  - Diário
+  - Semanal
+  - Mensal
+  - Anual
+
+O gráfico plotado contém 3 linhas: máximo, média e mínimo. Como é obtido um índice para cada pixel válido na imagem, esses valores se referem, considerando o período de agregação, o valor máximo encontrado, o valor médio e o valor mínimo.
+
+![Série temporal NDVI.](docs/img/mapa_ndvi.png)
+
+### Download de imagens de satélites
+
+A aplicação permite download e persistência de imagens das seguintes coleções:
+
+- Sentinel-2 L2A (CDSE)
+  - 10m
+  - 20m
+  - 30m
+  - 100m
+- Landsat 8-9 OLI/TIRS L1 (CDSE)
+  - 30m
+  - 100m
+- CBERS-4A WPM PCA fused (INPE)
+  - 2m
+
+![Série temporal de imagens de satélites.](docs/img/satelite.png)
+
 ## Arquitetura
+
+![Serviços no Railway.](docs/img/railway.png)
 
 ```
 banesensor/
@@ -13,6 +57,8 @@ banesensor/
 ├── db/               # PostgreSQL 16 + extensão PostGIS
 └── docker-compose.yml
 ```
+
+No banco de dados, são guardadas as séries temporais de NDVI e os metadados das imagens. Os `.png` em si são guardados em `/app/uploads` (em um volume anexado, no caso do Railway).
 
 ## Stack
 
@@ -25,7 +71,7 @@ banesensor/
 
 ## Pré-requisitos
 
-- Docker e Docker Compose
+- Docker e Docker Compose (para build local)
 - Conta gratuita no [Copernicus Data Space Ecosystem](https://dataspace.copernicus.eu/) com credenciais OAuth (client ID e secret)
 
 ## Variáveis de ambiente
@@ -36,11 +82,11 @@ Crie um arquivo `.env` na raiz do projeto:
 CDSE_ID=seu_client_id
 CDSE_SECRET=seu_client_secret
 
-DB_NAME=banesensor
-DB_USER=banesensor
-DB_PASSWORD=banesensor_secret
+DB_NAME=seu_db_name
+DB_USER=seu_db_user
+DB_PASSWORD=seu_db_password
 
-ASYNC_WORKERS=4
+ASYNC_WORKERS=4 (mude para 1, caso use um serviço limitado em RAM)
 ```
 
 ## Como executar
@@ -67,7 +113,7 @@ O projeto é um monorepo com três serviços (`backend/`, `frontend/` e `db/`), 
    - **Backend** — Root Directory: `backend`, nome de serviço sugerido: `backend`
    - **Frontend** — Root Directory: `frontend`, nome de serviço sugerido: `frontend`
 
-3. **Banco de dados**: o serviço `db/` usa a imagem `postgis/postgis:16-3.4`. Attache um **Volume** ao serviço para persistência (Railway montará o volume automaticamente). O `init.sql` cria as tabelas e a extensão PostGIS na primeira inicialização.
+3. **Banco de dados**: o serviço `db/` usa a imagem `postgis/postgis:16-3.4`. Anexe um **Volume** ao serviço para persistência (Railway montará o volume automaticamente). O `init.sql` cria as tabelas e a extensão PostGIS na primeira inicialização.
 
 4. **Env vars do Backend**:
    | Variável | Valor |
@@ -79,8 +125,8 @@ O projeto é um monorepo com três serviços (`backend/`, `frontend/` e `db/`), 
    | `DB_NAME` | `banesensor` (ou nome do banco) |
    | `DB_USER` | usuário do Postgres (padrão da imagem: `postgres`) |
    | `DB_PASSWORD` | senha do Postgres configurada na imagem |
-   | `UPLOAD_DIR` | `/app/uploads` (e attache um Volume neste path para persistir imagens) |
-   | `ASYNC_WORKERS` | `2` (opcional) |
+   | `UPLOAD_DIR` | `/app/uploads` (e anexe um Volume neste path para persistir imagens) |
+   | `ASYNC_WORKERS` | `4` (opcional, mude para 1 se serviço limitado em RAM) |
 
 5. **Env var do Frontend**:
    | Variável | Valor |
@@ -89,7 +135,7 @@ O projeto é um monorepo com três serviços (`backend/`, `frontend/` e `db/`), 
 
    O nginx renderiza `default.conf.template` via `envsubst` no boot, injetando `BACKEND_URL` no `proxy_pass`. Se `BACKEND_URL` não for definido, o padrão local é `http://backend:8000`.
 
-6. **Networking**: o frontend e o backend devem compartilhar o mesmo **Private Network** do Railway para que resolvam os hostnames internos.
+6. **Networking**: o frontend e o backend devem compartilhar o mesmo **Private Network** do Railway para que resolvam os hostnames internos (o que acontece por default, usando os 3 serviços no mesmo projeto).
 
 7. **Deploy**: o Railway detecta os `railway.json` automaticamente. Após o deploy, use o domínio público gerado para o serviço `frontend`.
 
@@ -141,5 +187,5 @@ O projeto é um monorepo com três serviços (`backend/`, `frontend/` e `db/`), 
 Tabelas principais:
 
 - `areas` — Áreas de interesse com geometria PostGIS
-- `ndvi_time_series` — Séries temporais de NDVI (com cache)
-- `satellite_images` — Imagens de satélite baixadas e metadados
+- `ndvi_time_series` — Séries temporais de NDVI
+- `satellite_images` — Metadados das imagens de satelite baixadas
