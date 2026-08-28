@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="frontend/public/assets/banespiao.png" alt="Logo" />
+  <img src="frontend/public/assets/logo.png" alt="Logo" />
 </p>
 
 <p align="center">Banespião</p>
