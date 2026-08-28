@@ -131,9 +131,9 @@ O projeto é um monorepo com três serviços (`backend/`, `frontend/` e `db/`), 
 5. **Env var do Frontend**:
    | Variável | Valor |
    |----------|-------|
-   | `BACKEND_URL` | URL completa da API backend (ex.: `https://banespiao-api.up.railway.app`) |
+   | `BACKEND_URL` | URL da API backend via **Private Network** (ex.: `http://backend.railway.internal:8000`) |
 
-   O nginx renderiza `default.conf.template` via `envsubst` no boot, injetando `BACKEND_URL` no `proxy_pass`. Se `BACKEND_URL` não for definido, o padrão local é `http://backend:8000`.
+   O nginx renderiza `default.conf.template` via `envsubst` no boot, injetando `BACKEND_URL` no `proxy_pass`. **Importante:** use o hostname privado `http://<serviço>.railway.internal:<porta>` (porta padrão do backend é `8000`). Não use a URL pública do backend (`https://...up.railway.app`): como o nginx preserva o header `Host` do frontend, o edge do Railway rotearia a requisição de volta para o frontend, causando loop e erro `502 upstream sent too big header`.
 
 6. **Networking**: o frontend e o backend devem compartilhar o mesmo **Private Network** do Railway para que resolvam os hostnames internos (o que acontece por default, usando os 3 serviços no mesmo projeto).
 
