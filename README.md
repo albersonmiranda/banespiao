@@ -2,8 +2,6 @@
   <img src="frontend/public/assets/logo.png" alt="Logo" />
 </p>
 
-<p align="center">Banespião</p>
-
 Protótipo para plataforma de monitoramento de vegetação por imagens de satélite. Permite upload de áreas via KML, cálculo de séries temporais de NDVI e obtenção de imagens de satélite em cores verdadeiras a partir do Copernicus Data Space Ecosystem (CDSE) e Instituto Nacional de Pesquisas Espaciais (INPE).
 
 ## Arquitetura
