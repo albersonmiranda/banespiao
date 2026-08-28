@@ -10,7 +10,55 @@ get_oauth_client <- function() {
   CDSE::GetOAuthClient(id = id, secret = secret)
 }
 
-make_ndvi_evalscript <- function(constellation = "sentinel-2") {
+SENTINEL2_NDVI_SCL_MASKED_SCRIPT <- R"---(
+//VERSION=3
+function setup() {
+  return {
+    input: [
+      {
+        bands: [
+          "B04",
+          "B08",
+          "SCL",
+          "dataMask"
+        ]
+      }
+    ],
+    output: [
+      {
+        id: "default",
+        bands: 1,
+        sampleType: "FLOAT32"
+      },
+      {
+        id: "dataMask",
+        bands: 1
+      }
+    ]
+  };
+}
+
+function evaluatePixel(sample) {
+  let ndvi = (sample.B08 - sample.B04) / (sample.B08 + sample.B04);
+  let scl = sample.SCL;
+  let isCloud = scl === 1 || scl === 3 || scl === 8 || scl === 9 || scl === 10;
+  if (isCloud) {
+    return {
+      default: [NaN],
+      dataMask: [0]
+    };
+  }
+  return {
+    default: [ndvi],
+    dataMask: [sample.dataMask]
+  };
+}
+)---"
+
+make_ndvi_evalscript <- function(constellation = "sentinel-2", mask_clouds = TRUE) {
+  if (constellation == "sentinel-2" && mask_clouds) {
+    return(trimws(SENTINEL2_NDVI_SCL_MASKED_SCRIPT))
+  }
   si <- rsi::spectral_indices()
   ndvi <- si[si$short_name == "NDVI", ]
   if (!nrow(ndvi)) stop("NDVI spectral index not available")
