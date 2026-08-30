@@ -97,14 +97,20 @@ compute_ndvi_timeseries <- function(aoi_sf, date_from, date_to, collection,
     as.Date(stats$from)
   }
 
+  to_num <- function(x) {
+    v <- suppressWarnings(as.numeric(x))
+    v[!is.finite(v) | is.nan(v)] <- NA_real_
+    v
+  }
+
   data.frame(
     date          = dates,
-    ndvi_min      = stats$min,
-    ndvi_mean     = stats$mean,
-    ndvi_max      = stats$max,
-    ndvi_stdev    = stats$stDev,
-    sample_count  = stats$sampleCount,
-    no_data_count = stats$noDataCount,
+    ndvi_min      = to_num(stats$min),
+    ndvi_mean     = to_num(stats$mean),
+    ndvi_max      = to_num(stats$max),
+    ndvi_stdev    = to_num(stats$stDev),
+    sample_count  = suppressWarnings(as.integer(stats$sampleCount)),
+    no_data_count = suppressWarnings(as.integer(stats$noDataCount)),
     stringsAsFactors = FALSE
   )
 }

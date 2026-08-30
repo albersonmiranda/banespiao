@@ -133,17 +133,21 @@ get_ndvi_cache <- function(area_id, date_from, date_to, collection, aggregation)
 insert_ndvi_series <- function(area_id, date_from, date_to, collection, aggregation, stats_df) {
   con <- get_pool()
   if (!nrow(stats_df)) return(invisible(NULL))
+  sql_lit <- function(x) {
+    if (length(x) != 1) x <- x[[1]]
+    if (is.na(x) || is.nan(x) || (!is.numeric(x) && toupper(as.character(x)) %in% c("NA", "NAN", "INF", "-INF"))) "NULL" else x
+  }
   for (i in seq_len(nrow(stats_df))) {
     row <- stats_df[i, ]
     query <- sprintf(
       "INSERT INTO ndvi_time_series (area_id, date, date_from, date_to, collection, aggregation, ndvi_min, ndvi_mean, ndvi_max, ndvi_stdev, sample_count, no_data_count) VALUES (%d, '%s', '%s', '%s', '%s', '%s', %s, %s, %s, %s, %s, %s) ON CONFLICT (area_id, date, date_from, date_to, collection, aggregation) DO UPDATE SET ndvi_min = EXCLUDED.ndvi_min, ndvi_mean = EXCLUDED.ndvi_mean, ndvi_max = EXCLUDED.ndvi_max, ndvi_stdev = EXCLUDED.ndvi_stdev, sample_count = EXCLUDED.sample_count, no_data_count = EXCLUDED.no_data_count",
       as.integer(area_id), as.character(row$date), date_from, date_to, collection, aggregation,
-      ifelse(is.na(row$ndvi_min), "NULL", row$ndvi_min),
-      ifelse(is.na(row$ndvi_mean), "NULL", row$ndvi_mean),
-      ifelse(is.na(row$ndvi_max), "NULL", row$ndvi_max),
-      ifelse(is.na(row$ndvi_stdev), "NULL", row$ndvi_stdev),
-      ifelse(is.na(row$sample_count), "NULL", row$sample_count),
-      ifelse(is.na(row$no_data_count), "NULL", row$no_data_count)
+      sql_lit(row$ndvi_min),
+      sql_lit(row$ndvi_mean),
+      sql_lit(row$ndvi_max),
+      sql_lit(row$ndvi_stdev),
+      sql_lit(row$sample_count),
+      sql_lit(row$no_data_count)
     )
     dbExecute(con, query)
   }
