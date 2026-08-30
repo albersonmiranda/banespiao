@@ -2,7 +2,7 @@ engine: plumber2
 routes:
   - plumber.R
 options:
-  host: ::
+  host: "::"
   port: 8000
   docType: rapidoc
   maxRequestSize: 20971520
