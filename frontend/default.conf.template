@@ -4,7 +4,7 @@ server {
     root /usr/share/nginx/html;
     index index.html;
 
-    resolver ${NGINX_RESOLVER} valid=30s;
+    resolver ${NGINX_RESOLVER} ipv6=on valid=30s;
 
     # Angular SPA routing
     location / {

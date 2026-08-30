@@ -11,5 +11,5 @@ FROM nginx:1.30.4-alpine
 RUN rm -rf /usr/share/nginx/html/*
 COPY --from=build /app/dist/frontend/browser /usr/share/nginx/html
 COPY default.conf.template /etc/nginx/templates/default.conf.template
-ENV NGINX_ENVSUBST_FILTER=^(BACKEND_URL|NGINX_RESOLVER)$ BACKEND_URL=http://backend.railway.internal:8000 NGINX_RESOLVER=127.0.0.11
+ENV NGINX_ENVSUBST_FILTER=^(BACKEND_URL|NGINX_RESOLVER)$ BACKEND_URL=http://backend.railway.internal:8000 NGINX_RESOLVER=[fd12::10]
 EXPOSE 80
