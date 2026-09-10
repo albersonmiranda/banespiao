@@ -26,19 +26,6 @@ db_disconnect <- function() {
   }
 }
 
-migrate_satellite_images <- function() {
-  con <- get_pool()
-  dbExecute(con, "ALTER TABLE satellite_images ADD COLUMN IF NOT EXISTS scene_id VARCHAR(255)")
-  dbExecute(con, "ALTER TABLE satellite_images ADD COLUMN IF NOT EXISTS satellite VARCHAR(100)")
-  dbExecute(con, "ALTER TABLE satellite_images ADD COLUMN IF NOT EXISTS resolution INTEGER NOT NULL DEFAULT 10")
-  dbExecute(con, "UPDATE satellite_images SET scene_id = COALESCE(scene_id, image_path)")
-  dbExecute(con, "ALTER TABLE satellite_images ALTER COLUMN scene_id SET NOT NULL")
-  dbExecute(con, "DROP INDEX IF EXISTS idx_image_cache")
-  dbExecute(con, "CREATE UNIQUE INDEX IF NOT EXISTS idx_image_cache ON satellite_images(area_id, collection, scene_id, resolution)")
-  dbExecute(con, "CREATE INDEX IF NOT EXISTS idx_satellite_area_date ON satellite_images(area_id, collection, image_date)")
-  invisible(NULL)
-}
-
 insert_area <- function(name, kml_filename, geom_sf) {
   con <- get_pool()
   wkt <- st_as_text(st_geometry(geom_sf))
@@ -119,18 +106,18 @@ get_image_paths_for_area <- function(id) {
   res$image_path
 }
 
-get_ndvi_cache <- function(area_id, date_from, date_to, collection, aggregation) {
+get_ndvi_cache <- function(area_id, date_from, date_to, collection, aggregation, resolution) {
   con <- get_pool()
   query <- sprintf(
-    "SELECT * FROM ndvi_time_series WHERE area_id = %d AND date_from = '%s' AND date_to = '%s' AND collection = '%s' AND aggregation = '%s' ORDER BY date",
-    as.integer(area_id), date_from, date_to, collection, aggregation
+    "SELECT * FROM ndvi_time_series WHERE area_id = %d AND date_from = '%s' AND date_to = '%s' AND collection = '%s' AND aggregation = '%s' AND resolution = %d ORDER BY date",
+    as.integer(area_id), date_from, date_to, collection, aggregation, as.integer(resolution)
   )
   res <- dbGetQuery(con, query)
   if (nrow(res) == 0) return(NULL)
   res
 }
 
-insert_ndvi_series <- function(area_id, date_from, date_to, collection, aggregation, stats_df) {
+insert_ndvi_series <- function(area_id, date_from, date_to, collection, aggregation, stats_df, resolution) {
   con <- get_pool()
   if (!nrow(stats_df)) return(invisible(NULL))
   sql_lit <- function(x) {
@@ -140,8 +127,8 @@ insert_ndvi_series <- function(area_id, date_from, date_to, collection, aggregat
   for (i in seq_len(nrow(stats_df))) {
     row <- stats_df[i, ]
     query <- sprintf(
-      "INSERT INTO ndvi_time_series (area_id, date, date_from, date_to, collection, aggregation, ndvi_min, ndvi_mean, ndvi_max, ndvi_stdev, sample_count, no_data_count) VALUES (%d, '%s', '%s', '%s', '%s', '%s', %s, %s, %s, %s, %s, %s) ON CONFLICT (area_id, date, date_from, date_to, collection, aggregation) DO UPDATE SET ndvi_min = EXCLUDED.ndvi_min, ndvi_mean = EXCLUDED.ndvi_mean, ndvi_max = EXCLUDED.ndvi_max, ndvi_stdev = EXCLUDED.ndvi_stdev, sample_count = EXCLUDED.sample_count, no_data_count = EXCLUDED.no_data_count",
-      as.integer(area_id), as.character(row$date), date_from, date_to, collection, aggregation,
+      "INSERT INTO ndvi_time_series (area_id, date, date_from, date_to, collection, aggregation, resolution, ndvi_min, ndvi_mean, ndvi_max, ndvi_stdev, sample_count, no_data_count) VALUES (%d, '%s', '%s', '%s', '%s', '%s', %d, %s, %s, %s, %s, %s, %s) ON CONFLICT (area_id, date, date_from, date_to, collection, aggregation, resolution) DO UPDATE SET ndvi_min = EXCLUDED.ndvi_min, ndvi_mean = EXCLUDED.ndvi_mean, ndvi_max = EXCLUDED.ndvi_max, ndvi_stdev = EXCLUDED.ndvi_stdev, sample_count = EXCLUDED.sample_count, no_data_count = EXCLUDED.no_data_count",
+      as.integer(area_id), as.character(row$date), date_from, date_to, collection, aggregation, as.integer(resolution),
       sql_lit(row$ndvi_min),
       sql_lit(row$ndvi_mean),
       sql_lit(row$ndvi_max),

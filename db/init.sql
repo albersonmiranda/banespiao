@@ -16,6 +16,7 @@ CREATE TABLE ndvi_time_series (
     date_to       DATE NOT NULL,
     collection    VARCHAR(100) NOT NULL,
     aggregation   VARCHAR(20) NOT NULL DEFAULT 'day',
+    resolution    INTEGER NOT NULL,
     ndvi_min      DOUBLE PRECISION,
     ndvi_mean     DOUBLE PRECISION,
     ndvi_max      DOUBLE PRECISION,
@@ -43,5 +44,5 @@ CREATE INDEX idx_areas_geom ON areas USING GIST(geom);
 CREATE INDEX idx_ndvi_area_id ON ndvi_time_series(area_id);
 CREATE INDEX idx_satellite_area_id ON satellite_images(area_id);
 CREATE INDEX idx_satellite_area_date ON satellite_images(area_id, collection, image_date);
-CREATE UNIQUE INDEX idx_ndvi_cache ON ndvi_time_series(area_id, date, date_from, date_to, collection, aggregation);
+CREATE UNIQUE INDEX idx_ndvi_cache ON ndvi_time_series(area_id, date, date_from, date_to, collection, aggregation, resolution);
 CREATE UNIQUE INDEX idx_image_cache ON satellite_images(area_id, collection, scene_id, resolution);

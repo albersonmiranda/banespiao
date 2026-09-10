@@ -23,7 +23,6 @@ source("R/satellite.R", local = TRUE)
 source("R/cbers.R", local = TRUE)
 
 ensure_upload_dir()
-migrate_satellite_images()
 start_async_workers()
 
 # Keep uploaded KML bytes raw regardless of the browser-supplied Content-Type
@@ -114,7 +113,7 @@ function(body) {
 #* @body date_to:date End of the period (required)
 #* @body collection:string("sentinel-2-l2a") Satellite collection
 #* @body aggregation:string("month") Aggregation ('day', 'week', 'month' or 'year')
-#* @body resolution:integer(100) Resolution in meters
+#* @body resolution:integer Resolution in meters (required)
 #* @response 200:object NDVI time series
 #* @response 404:object Unknown area
 #* @response 500:object Processing error
@@ -128,7 +127,14 @@ function(id, body) {
     }
     collection  <- ifelse(is.null(body[["collection"]]), "sentinel-2-l2a", body[["collection"]])
     aggregation <- ifelse(is.null(body[["aggregation"]]), "month", body[["aggregation"]])
-    resolution  <- ifelse(is.null(body[["resolution"]]), 100L, as.integer(body[["resolution"]]))
+    resolution_raw <- body[["resolution"]]
+    if (is.null(resolution_raw)) {
+      return(list(good = FALSE, status = 400L, err = "resolution is required"))
+    }
+    resolution <- as.integer(resolution_raw)
+    if (is.na(resolution) || resolution <= 0L) {
+      return(list(good = FALSE, status = 400L, err = "resolution must be a positive integer"))
+    }
 
     agg <- list(
       day   = c(1L, "day"),
@@ -152,10 +158,10 @@ function(id, body) {
       collection = collection, aggregation_period = agg_period,
       aggregation_unit = agg_unit, resolution = resolution
     )
-    insert_ndvi_series(id, date_from, date_to, collection, aggregation, stats)
+    insert_ndvi_series(id, date_from, date_to, collection, aggregation, stats, resolution)
     list(good = TRUE, result = list(
       area_id = id, date_from = date_from, date_to = date_to,
-      collection = collection, aggregation = aggregation, data = stats
+      collection = collection, aggregation = aggregation, resolution = resolution, data = stats
     ))
   }, error = function(e) {
     message(sprintf("Image sync failed for area %s: %s", id, conditionMessage(e)))
@@ -182,6 +188,7 @@ function(response, result) {
 #* @query date_to:string* End of the period
 #* @query collection:string("sentinel-2-l2a") Satellite collection
 #* @query aggregation:string("month") Aggregation level
+#* @query resolution:integer Resolution in meters (required)
 #* @response 200:object Cached NDVI time series
 #* @response 404:object No cached series for these parameters
 function(id, query) {
@@ -189,14 +196,21 @@ function(id, query) {
   date_to     <- query$date_to
   collection  <- query$collection %||% "sentinel-2-l2a"
   aggregation <- query$aggregation %||% "month"
+  if (is.null(query$resolution)) {
+    reqres::abort_status(400, detail = "resolution query parameter is required")
+  }
+  resolution <- as.integer(query$resolution)
+  if (is.na(resolution) || resolution <= 0L) {
+    reqres::abort_status(400, detail = "resolution must be a positive integer")
+  }
 
-  cached <- get_ndvi_cache(id, date_from, date_to, collection, aggregation)
+  cached <- get_ndvi_cache(id, date_from, date_to, collection, aggregation, resolution)
   if (is.null(cached)) {
     reqres::abort_status(404, detail = "No cached NDVI data found. POST /api/ndvi/<id> to compute it first.")
   }
   list(
     area_id = id, date_from = date_from, date_to = date_to,
-    collection = collection, aggregation = aggregation,
+    collection = collection, aggregation = aggregation, resolution = resolution,
     data = cached[, c("date", "ndvi_min", "ndvi_mean", "ndvi_max", "ndvi_stdev", "sample_count", "no_data_count")]
   )
 }

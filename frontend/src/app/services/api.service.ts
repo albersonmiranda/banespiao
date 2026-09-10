@@ -54,13 +54,15 @@ export class ApiService {
     dateFrom: string,
     dateTo: string,
     collection: string,
-    aggregation: string
+    aggregation: string,
+    resolution: number
   ): Observable<NdviTimeSeries> {
     const params = {
       date_from: dateFrom,
       date_to: dateTo,
       collection,
       aggregation,
+      resolution: String(resolution),
     };
     return this.http.get<NdviTimeSeries>(`${this.apiUrl}/ndvi/${areaId}`, {
       params,

@@ -69,7 +69,7 @@ make_ndvi_evalscript <- function(constellation = "sentinel-2", mask_clouds = TRU
 compute_ndvi_timeseries <- function(aoi_sf, date_from, date_to, collection,
                                      aggregation_period = 1,
                                      aggregation_unit = "month",
-                                     resolution = 100) {
+                                     resolution) {
   client <- get_oauth_client()
   script <- make_ndvi_evalscript(
     constellation = ifelse(grepl("sentinel", collection), "sentinel-2", "landsat")
