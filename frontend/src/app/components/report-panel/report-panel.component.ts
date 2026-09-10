@@ -37,38 +37,70 @@ import { Area } from '../../models/types';
         <div class="area-selector-section" [class.has-selection]="selectedAreaId">
           <div class="area-selector-card">
             <div class="selector-header">
-              <label for="area-select" class="selector-label">Área de Monitoramento</label>
+              <label for="area-search" class="selector-label">Área de Monitoramento</label>
               <span class="area-count" *ngIf="areas.length > 0">{{ areas.length }} área{{ areas.length !== 1 ? 's' : '' }}</span>
             </div>
             <div class="selector-controls">
-              <label class="area-search" for="area-search">
-                <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                  <circle cx="11" cy="11" r="8"></circle>
-                  <path d="m21 21-4.35-4.35"></path>
-                </svg>
-                <input
-                  id="area-search"
-                  type="search"
-                  class="area-search-input"
-                  [(ngModel)]="areaSearch"
-                  (input)="filterAreas(areaSearch)"
-                  placeholder="Buscar área"
-                  aria-label="Buscar área de monitoramento"
-                />
-              </label>
-              <select
-                id="area-select"
-                class="area-select"
-                [(ngModel)]="selectedAreaId"
-                (ngModelChange)="onAreaChange($event)"
-                [disabled]="areas.length === 0"
-                aria-label="Selecionar área de monitoramento"
-              >
-                <option [ngValue]="null">-- Selecione uma área --</option>
-                <option *ngFor="let area of filteredAreas" [ngValue]="area.id">
-                  {{ area.name }} · {{ area.kml_filename }} · {{ area.created_at | date:'dd/MM/yyyy' }}
-                </option>
-              </select>
+              <div class="area-combobox">
+                <div class="area-combobox-field">
+                  <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <circle cx="11" cy="11" r="8"></circle>
+                    <path d="m21 21-4.35-4.35"></path>
+                  </svg>
+                  <input
+                    id="area-search"
+                    type="text"
+                    class="area-search-input"
+                    role="combobox"
+                    [attr.aria-expanded]="isOpen"
+                    aria-controls="area-listbox"
+                    aria-autocomplete="list"
+                    [attr.aria-activedescendant]="isOpen && activeIndex >= 0 ? 'area-option-' + activeIndex : null"
+                    [(ngModel)]="areaSearch"
+                    (focus)="openDropdown()"
+                    (input)="onSearchInput(areaSearch)"
+                    (keydown)="onKeydown($event)"
+                    (blur)="closeDropdown()"
+                    placeholder="Buscar área"
+                    aria-label="Buscar área de monitoramento"
+                  />
+                  <button
+                    *ngIf="areaSearch"
+                    type="button"
+                    class="combobox-clear"
+                    (click)="clearSearch($event)"
+                    aria-label="Limpar busca"
+                  >
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                      <line x1="18" y1="6" x2="6" y2="18"></line>
+                      <line x1="6" y1="6" x2="18" y2="18"></line>
+                    </svg>
+                  </button>
+                </div>
+                <ul
+                  *ngIf="isOpen && areas.length > 0"
+                  id="area-listbox"
+                  class="area-listbox"
+                  role="listbox"
+                  aria-label="Áreas de monitoramento"
+                >
+                  <li
+                    *ngFor="let area of filteredAreas; let i = index"
+                    [id]="'area-option-' + i"
+                    role="option"
+                    [attr.aria-selected]="area.id === selectedAreaId"
+                    [class.active]="i === activeIndex"
+                    (mousedown)="$event.preventDefault()"
+                    (click)="selectAreaOption(area)"
+                  >
+                    <span class="option-name">{{ area.name }}</span>
+                    <span class="option-meta">{{ area.kml_filename }} · {{ area.created_at | date:'dd/MM/yyyy' }}</span>
+                  </li>
+                  <li *ngIf="filteredAreas.length === 0" class="area-listbox-empty" role="presentation">
+                    Nenhuma área corresponde à busca.
+                  </li>
+                </ul>
+              </div>
               <button
                 *ngIf="selectedAreaId"
                 class="btn btn-danger btn-sm"
@@ -83,9 +115,6 @@ import { Area } from '../../models/types';
                 <span>Excluir</span>
               </button>
             </div>
-            <p *ngIf="areas.length > 0 && filteredAreas.length === 0" class="search-empty">
-              Nenhuma área corresponde à busca.
-            </p>
             <div *ngIf="loadError" class="alert alert-danger">{{ loadError }}</div>
             <div *ngIf="selectError" class="alert alert-danger">{{ selectError }}</div>
           </div>
@@ -279,22 +308,26 @@ import { Area } from '../../models/types';
       flex-wrap: wrap;
     }
 
-    .area-search {
+    .area-combobox {
+      position: relative;
+      flex: 1;
+      min-width: 280px;
+    }
+
+    .area-combobox-field {
       display: flex;
       align-items: center;
       gap: var(--space-2);
-      flex: 0 1 280px;
-      min-width: 220px;
       height: var(--input-height);
       padding: 0 var(--space-3);
       color: var(--color-text-tertiary);
       background: var(--color-bg-primary);
       border: 1px solid var(--color-border-light);
       border-radius: var(--radius-md);
-      transition: border-color var(--transition-fast), box-shadow var(--transition-fast), background var(--transition-fast);
+      transition: border-color 150ms ease, box-shadow 150ms ease;
     }
 
-    .area-search:focus-within {
+    .area-combobox-field:focus-within {
       border-color: var(--color-border-focus);
       background: var(--color-bg-secondary);
       box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-primary) 15%, transparent);
@@ -320,40 +353,71 @@ import { Area } from '../../models/types';
       color: var(--color-text-tertiary);
     }
 
-    .search-empty {
-      margin: var(--space-3) 0 0;
+    .combobox-clear {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 20px;
+      height: 20px;
+      flex-shrink: 0;
+      padding: 0;
+      border: 0;
+      border-radius: var(--radius-full);
       color: var(--color-text-tertiary);
-      font-size: var(--font-size-sm);
+      background: transparent;
+      cursor: pointer;
     }
 
-    .area-select {
-      flex: 1;
-      min-width: 280px;
-      width: 100%;
-      height: var(--input-height);
-      padding: 0 var(--space-3);
-      font-size: var(--font-size-sm);
-      font-family: inherit;
+    .combobox-clear:hover {
       color: var(--color-text-primary);
-      background: var(--color-bg-secondary);
+      background: var(--color-bg-tertiary);
+    }
+
+    .area-listbox {
+      position: absolute;
+      top: calc(100% + var(--space-1));
+      left: 0;
+      right: 0;
+      z-index: 50;
+      max-height: 260px;
+      overflow-y: auto;
+      margin: 0;
+      padding: 4px;
+      list-style: none;
+      background: var(--color-bg-primary);
       border: 1px solid var(--color-border-light);
       border-radius: var(--radius-md);
-      transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
-      appearance: none;
-      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%2364748b' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
-      background-repeat: no-repeat;
-      background-position: right var(--space-3) center;
-      padding-right: var(--space-10);
     }
 
-    .area-select:hover:not(:disabled) {
-      border-color: var(--color-border-medium);
+    .area-listbox li[role="option"] {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      padding: var(--space-2) var(--space-3);
+      border-radius: var(--radius-sm);
+      font-size: var(--font-size-sm);
+      cursor: pointer;
     }
 
-    .area-select:focus {
-      outline: none;
-      border-color: var(--color-border-focus);
-      box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-primary) 15%, transparent);
+    .area-listbox li[role="option"]:hover,
+    .area-listbox li[role="option"].active {
+      background: var(--color-bg-tertiary);
+    }
+
+    .option-name {
+      font-weight: var(--font-weight-medium);
+      color: var(--color-text-primary);
+    }
+
+    .option-meta {
+      font-size: var(--font-size-xs);
+      color: var(--color-text-tertiary);
+    }
+
+    .area-listbox-empty {
+      padding: var(--space-3);
+      color: var(--color-text-tertiary);
+      font-size: var(--font-size-sm);
     }
 
     .btn {
@@ -603,11 +667,7 @@ import { Area } from '../../models/types';
       .selector-controls {
         width: 100%;
       }
-      .area-search {
-        flex: 1 1 100%;
-        min-width: 0;
-      }
-      .area-select {
+      .area-combobox {
         flex: 1 1 100%;
         min-width: 0;
       }
@@ -626,6 +686,8 @@ export class ReportPanelComponent implements OnInit {
   loadError = '';
   selectError = '';
   deleting = false;
+  isOpen = false;
+  activeIndex = -1;
 
   filterAreas(value: string = this.areaSearch) {
     this.areaSearch = value;
@@ -633,6 +695,67 @@ export class ReportPanelComponent implements OnInit {
     this.filteredAreas = !query ? this.areas : this.areas.filter((area) =>
       `${area.name} ${area.kml_filename}`.toLocaleLowerCase().includes(query)
     );
+  }
+
+  openDropdown() {
+    if (this.areas.length > 0) {
+      this.isOpen = true;
+    }
+  }
+
+  closeDropdown() {
+    this.isOpen = false;
+    this.activeIndex = -1;
+  }
+
+  onSearchInput(value: string) {
+    this.filterAreas(value);
+    this.activeIndex = -1;
+    this.openDropdown();
+  }
+
+  selectAreaOption(area: Area) {
+    this.areaSearch = area.name;
+    this.closeDropdown();
+    this.selectArea(area.id);
+  }
+
+  clearSearch(event: MouseEvent) {
+    event.preventDefault();
+    this.areaSearch = '';
+    this.filteredAreas = this.areas;
+    this.selectedAreaId = null;
+    this.selectedGeojson = null;
+    this.selectError = '';
+    this.openDropdown();
+  }
+
+  onKeydown(event: KeyboardEvent) {
+    if (this.filteredAreas.length === 0) return;
+    switch (event.key) {
+      case 'ArrowDown':
+        event.preventDefault();
+        if (!this.isOpen) this.openDropdown();
+        this.activeIndex = Math.min(this.activeIndex + 1, this.filteredAreas.length - 1);
+        break;
+      case 'ArrowUp':
+        event.preventDefault();
+        if (!this.isOpen) this.openDropdown();
+        this.activeIndex = Math.max(this.activeIndex - 1, 0);
+        break;
+      case 'Enter':
+        if (this.isOpen && this.activeIndex >= 0 && this.filteredAreas[this.activeIndex]) {
+          event.preventDefault();
+          this.selectAreaOption(this.filteredAreas[this.activeIndex]);
+        }
+        break;
+      case 'Escape':
+        this.closeDropdown();
+        break;
+      case 'Tab':
+        this.closeDropdown();
+        break;
+    }
   }
 
   constructor(private api: ApiService, private changeDetector: ChangeDetectorRef) {}
@@ -667,20 +790,10 @@ export class ReportPanelComponent implements OnInit {
   onAreaCreated(event: { id: number; name: string; geojson: any }) {
     this.selectedAreaId = event.id;
     this.selectedGeojson = event.geojson;
+    this.areaSearch = event.name;
     this.selectError = '';
+    this.closeDropdown();
     this.loadAreas();
-  }
-
-  onAreaChange(value: number | string | null) {
-    const id = typeof value === 'number' ? value : Number(value);
-    if (!Number.isInteger(id) || id <= 0) {
-      this.selectedAreaId = null;
-      this.selectedGeojson = null;
-      this.selectError = '';
-      return;
-    }
-
-    this.selectArea(id);
   }
 
   selectArea(id: number) {
@@ -710,6 +823,9 @@ export class ReportPanelComponent implements OnInit {
       next: () => {
         this.selectedAreaId = null;
         this.selectedGeojson = null;
+        this.areaSearch = '';
+        this.filterAreas('');
+        this.closeDropdown();
         this.loadAreas();
         this.deleting = false;
       },
