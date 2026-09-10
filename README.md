@@ -128,12 +128,13 @@ O projeto é um monorepo com três serviços (`backend/`, `frontend/` e `db/`), 
    | `UPLOAD_DIR` | `/app/uploads` (e anexe um Volume neste path para persistir imagens) |
    | `ASYNC_WORKERS` | `4` (opcional, mude para 1 se serviço limitado em RAM) |
 
-5. **Env var do Frontend**:
+5. **Env vars do Frontend**:
    | Variável | Valor |
    |----------|-------|
    | `BACKEND_URL` | URL da API backend via **Private Network** (ex.: `http://backend.railway.internal:8000`) |
+   | `NGINX_RESOLVER` | `[fd12::10]` — DNS resolver da Private Network do Railway (obrigatório) |
 
-   O nginx renderiza `default.conf.template` via `envsubst` no boot, injetando `BACKEND_URL` no `proxy_pass`. **Importante:** use o hostname privado `http://<serviço>.railway.internal:<porta>` (porta padrão do backend é `8000`). Não use a URL pública do backend (`https://...up.railway.app`): como o nginx preserva o header `Host` do frontend, o edge do Railway rotearia a requisição de volta para o frontend, causando loop e erro `502 upstream sent too big header`.
+   O nginx renderiza `default.conf.template` via `envsubst` no boot, injetando `BACKEND_URL` e `NGINX_RESOLVER`. **Importante:** os valores acima **sobrescrevem** os defaults do `Dockerfile` (que são pensados para desenvolvimento local com Docker Compose: `http://backend:8000` e `127.0.0.11`). No Railway o `NGINX_RESOLVER` **deve** ser `[fd12::10]`, senão o nginx não resolve os hostnames da Private Network. Use o hostname privado `http://<serviço>.railway.internal:<porta>` (porta padrão do backend é `8000`). Não use a URL pública do backend (`https://...up.railway.app`): como o nginx preserva o header `Host` do frontend, o edge do Railway rotearia a requisição de volta para o frontend, causando loop e erro `502 upstream sent too big header`.
 
 6. **Networking**: o frontend e o backend devem compartilhar o mesmo **Private Network** do Railway para que resolvam os hostnames internos (o que acontece por default, usando os 3 serviços no mesmo projeto).
 
