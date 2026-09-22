@@ -59,25 +59,12 @@ render_cbers_preview <- function(source_href, aoi_sf, output_file,
 
 search_cbers_previews <- function(aoi_sf, date_from, date_to) {
   bbox <- sf::st_bbox(sf::st_transform(aoi_sf, 4326))
-  query_url <- paste0(CBERS_STAC_URL, "search")
-  response <- tryCatch({
-    request <- httr2::request(query_url) |>
-      httr2::req_url_query(
-        collections = CBERS_PREVIEW_COLLECTION,
-        bbox = paste(as.numeric(bbox), collapse = ","),
-        datetime = paste(date_from, date_to, sep = "/"),
-        limit = 100
-      ) |>
-      httr2::req_timeout(60) |>
-      httr2::req_options(ipresolve = 1, connecttimeout = 60) |>
-      httr2::req_retry(max_tries = 3, backoff = ~ 2 ^ .x)
-    httr2::req_perform(request) |> httr2::resp_body_json(simplifyVector = FALSE)
-  }, error = function(error) {
-    stop("CBERS catalog is temporarily unreachable from the backend container. Please retry shortly. Details: ", conditionMessage(error))
-  })
-  features <- response$features %||% list()
-  if (!length(features)) return(list())
-  features
+  tryCatch(
+    stac_search_items(CBERS_PREVIEW_COLLECTION, bbox, paste(date_from, date_to, sep = "/")),
+    error = function(error) {
+      stop("CBERS catalog is temporarily unreachable from the backend container. Please retry shortly. Details: ", conditionMessage(error))
+    }
+  )
 }
 
 get_cbers_image_series <- function(aoi_sf, area_id, date_from, date_to,

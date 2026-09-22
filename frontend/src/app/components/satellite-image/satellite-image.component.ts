@@ -28,6 +28,7 @@ import { ApiService } from '../../services/api.service';
             aria-label="Fonte de imagens de satélite"
           >
             <option value="cdse">Sentinel/Landsat via CDSE</option>
+            <option value="inpe">Sentinel/Landsat via INPE</option>
             <option value="cbers">CBERS-4A via INPE</option>
           </select>
         </div>
@@ -444,7 +445,7 @@ export class SatelliteImageComponent implements OnChanges {
   @Input() areaId: number | null = null;
 
   collection = 'sentinel-2-l2a';
-  provider: 'cdse' | 'cbers' = 'cdse';
+  provider: 'cdse' | 'inpe' | 'cbers' = 'cdse';
   resolution = 10;
   loading = false;
   error = '';
@@ -468,16 +469,26 @@ export class SatelliteImageComponent implements OnChanges {
   }
 
   get availableCollections(): { id: string; label: string }[] {
-    return this.provider === 'cbers'
-      ? [{ id: 'CB4A-WPM-PCA-FUSED-1', label: 'CBERS-4A WPM PCA fused (2 m preview)' }]
-      : [
-          { id: 'sentinel-2-l2a', label: 'Sentinel-2 L2A' },
-          { id: 'landsat-ot-l1', label: 'Landsat 8-9 OLI/TIRS L1' },
-        ];
+    if (this.provider === 'cbers') {
+      return [{ id: 'CB4A-WPM-PCA-FUSED-1', label: 'CBERS-4A WPM PCA fused (2 m preview)' }];
+    }
+    if (this.provider === 'inpe') {
+      return [
+        { id: 'S2_L2A-1', label: 'Sentinel-2 L2A (INPE)' },
+        { id: 'landsat-2', label: 'Landsat Collection 2 (INPE)' },
+      ];
+    }
+    return [
+      { id: 'sentinel-2-l2a', label: 'Sentinel-2 L2A' },
+      { id: 'landsat-ot-l1', label: 'Landsat 8-9 OLI/TIRS L1' },
+    ];
   }
 
   get availableResolutions(): number[] {
     if (this.provider === 'cbers') return [2];
+    if (this.provider === 'inpe') {
+      return this.collection.startsWith('landsat') ? [30] : [10];
+    }
     return this.collection.startsWith('landsat') ? [30, 100] : [10, 20, 30, 100];
   }
 
@@ -499,10 +510,18 @@ export class SatelliteImageComponent implements OnChanges {
     this.selectedImageId = Number.isInteger(id) ? id : null;
   }
 
-  changeProvider(provider: 'cdse' | 'cbers') {
+  changeProvider(provider: 'cdse' | 'inpe' | 'cbers') {
     this.provider = provider;
-    this.collection = provider === 'cbers' ? 'CB4A-WPM-PCA-FUSED-1' : 'sentinel-2-l2a';
-    this.resolution = provider === 'cbers' ? 2 : 10;
+    if (provider === 'cbers') {
+      this.collection = 'CB4A-WPM-PCA-FUSED-1';
+      this.resolution = 2;
+    } else if (provider === 'inpe') {
+      this.collection = 'S2_L2A-1';
+      this.resolution = 10;
+    } else {
+      this.collection = 'sentinel-2-l2a';
+      this.resolution = 10;
+    }
     this.images = [];
     this.selectedImageId = null;
     this.loadCachedImages();

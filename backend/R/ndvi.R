@@ -54,10 +54,10 @@ compute_ndvi_timeseries <- function(aoi_sf, date_from, date_to, collection,
     stop("No NDVI data available for the selected period and area")
   }
 
-  dates <- if ("date" %in% names(stats)) {
-    as.Date(stats$date)
+  dates <- if ("to" %in% names(stats)) {
+    as.Date(stats$to)
   } else {
-    as.Date(stats$from)
+    as.Date(stats$date)
   }
 
   to_num <- function(x) {
