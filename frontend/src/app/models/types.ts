@@ -55,12 +55,35 @@ export interface NdviRequest {
   collection: string;
   aggregation: string;
   resolution?: number;
+  provider?: 'cdse' | 'inpe';
 }
 
 export interface ImageRequest {
-  provider?: 'cdse' | 'cbers';
+  provider?: 'cdse' | 'inpe' | 'cbers';
   collection: string;
   date_from: string;
   date_to: string;
   resolution?: number;
+}
+
+export interface PrecipitationDataPoint {
+  date: string;
+  precip_total: number;
+  precip_days: number;
+}
+
+export interface PrecipitationSeries {
+  area_id: number;
+  date_from: string;
+  date_to: string;
+  aggregation: string;
+  source: string;
+  data: PrecipitationDataPoint[];
+}
+
+export interface PrecipitationRequest {
+  date_from: string;
+  date_to: string;
+  aggregation: string;
+  source?: string;
 }

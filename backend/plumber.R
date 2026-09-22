@@ -21,6 +21,8 @@ source("R/kml.R", local = TRUE)
 source("R/ndvi.R", local = TRUE)
 source("R/satellite.R", local = TRUE)
 source("R/cbers.R", local = TRUE)
+source("R/inpe.R", local = TRUE)
+source("R/precipitation.R", local = TRUE)
 
 ensure_upload_dir()
 start_async_workers()
@@ -114,6 +116,7 @@ function(body) {
 #* @body collection:string("sentinel-2-l2a") Satellite collection
 #* @body aggregation:string("month") Aggregation ('day', 'week', 'month' or 'year')
 #* @body resolution:integer Resolution in meters (required)
+#* @body provider:string("cdse") Source provider ('cdse' or 'inpe')
 #* @response 200:object NDVI time series
 #* @response 404:object Unknown area
 #* @response 500:object Processing error
@@ -127,6 +130,7 @@ function(id, body) {
     }
     collection  <- ifelse(is.null(body[["collection"]]), "sentinel-2-l2a", body[["collection"]])
     aggregation <- ifelse(is.null(body[["aggregation"]]), "month", body[["aggregation"]])
+    provider    <- ifelse(is.null(body[["provider"]]), "cdse", body[["provider"]])
     resolution_raw <- body[["resolution"]]
     if (is.null(resolution_raw)) {
       return(list(good = FALSE, status = 400L, err = "resolution is required"))
@@ -153,11 +157,19 @@ function(id, body) {
       return(list(good = FALSE, status = 404L, err = "Area not found"))
     }
 
-    stats <- compute_ndvi_timeseries(
-      aoi_sf = aoi_geom, date_from = date_from, date_to = date_to,
-      collection = collection, aggregation_period = agg_period,
-      aggregation_unit = agg_unit, resolution = resolution
-    )
+    stats <- if (identical(provider, "inpe")) {
+      compute_inpe_ndvi_timeseries(
+        aoi_sf = aoi_geom, date_from = date_from, date_to = date_to,
+        collection = resolve_inpe_collection(collection), aggregation_period = agg_period,
+        aggregation_unit = agg_unit, resolution = resolution
+      )
+    } else {
+      compute_ndvi_timeseries(
+        aoi_sf = aoi_geom, date_from = date_from, date_to = date_to,
+        collection = collection, aggregation_period = agg_period,
+        aggregation_unit = agg_unit, resolution = resolution
+      )
+    }
     insert_ndvi_series(id, date_from, date_to, collection, aggregation, stats, resolution)
     list(good = TRUE, result = list(
       area_id = id, date_from = date_from, date_to = date_to,
@@ -232,6 +244,7 @@ format_image_records <- function(records, area_id) {
 #* @post /api/image/<id:integer>
 #* @serializer unboxedJSON
 #* @async
+#* @body provider:string("cdse") Source provider ('cdse', 'inpe' or 'cbers')
 #* @body collection:string("sentinel-2-l2a") Satellite collection
 #* @body date_from:date Start date
 #* @body date_to:date End date
@@ -243,8 +256,11 @@ format_image_records <- function(records, area_id) {
 function(id, body) {
   suppressMessages({ library(DBI); library(RPostgres); library(sf) })
   tryCatch({
+    provider <- ifelse(is.null(body[["provider"]]), "cdse", body[["provider"]])
     collection <- ifelse(is.null(body[["collection"]]), "sentinel-2-l2a", body[["collection"]])
-    if (collection %in% c("landsat-c2-l2", "landsat-ot-c2-l2")) collection <- "landsat-ot-l1"
+    if (!identical(provider, "inpe") && !startsWith(collection, "CB4A-")) {
+      if (collection %in% c("landsat-c2-l2", "landsat-ot-c2-l2")) collection <- "landsat-ot-l1"
+    }
     resolution <- ifelse(is.null(body[["resolution"]]), 10L, as.integer(body[["resolution"]]))
     date_to <- ifelse(is.null(body[["date_to"]]), as.character(Sys.Date()), as.character(body[["date_to"]]))
     date_from <- ifelse(is.null(body[["date_from"]]), as.character(as.Date(date_to) - 365), as.character(body[["date_from"]]))
@@ -254,7 +270,10 @@ function(id, body) {
       return(list(good = FALSE, status = 404L, err = "Area not found"))
     }
 
-    records <- if (identical(body[["provider"]], "cbers") || startsWith(collection, "CB4A-")) {
+    records <- if (identical(provider, "inpe")) {
+      get_inpe_image_series(aoi_sf = aoi_geom, area_id = id, collection = resolve_inpe_collection(collection),
+                            date_from = date_from, date_to = date_to, resolution = resolution)
+    } else if (identical(provider, "cbers") || startsWith(collection, "CB4A-")) {
       get_cbers_image_series(aoi_geom, id, date_from, date_to, resolution = 2L)
     } else {
       get_image_series(aoi_sf = aoi_geom, area_id = id, collection = collection,
@@ -265,6 +284,7 @@ function(id, body) {
       images = format_image_records(records, id)
     ))
   }, error = function(e) {
+    message(sprintf("Image sync failed for area %s: %s", id, conditionMessage(e)))
     list(good = FALSE, status = 500L, err = conditionMessage(e))
   })
 }
@@ -279,6 +299,104 @@ function(response, result) {
   }
   response$body <- body$result
   Next
+}
+
+#* Compute the precipitation time series for an area
+#*
+#* Uses the free Open-Meteo historical API (ERA5/ERA5-Land reanalysis). Runs
+#* asynchronously on a parallel worker and caches the result.
+#* @post /api/precipitation/<id:integer>
+#* @serializer unboxedJSON
+#* @async
+#* @body date_from:date Start of the period (required)
+#* @body date_to:date End of the period (required)
+#* @body aggregation:string("month") Aggregation ('day', 'week', 'month' or 'year')
+#* @body source:string("open-meteo") Data source
+#* @response 200:object Precipitation time series
+#* @response 404:object Unknown area
+#* @response 500:object Processing error
+function(id, body) {
+  suppressMessages({ library(DBI); library(RPostgres); library(sf) })
+  tryCatch({
+    date_from <- body[["date_from"]]
+    date_to   <- body[["date_to"]]
+    if (is.null(date_from) || is.null(date_to)) {
+      return(list(good = FALSE, status = 400L, err = "date_from and date_to are required"))
+    }
+    aggregation <- ifelse(is.null(body[["aggregation"]]), "month", body[["aggregation"]])
+    source      <- ifelse(is.null(body[["source"]]), "open-meteo", body[["source"]])
+
+    agg <- list(
+      day   = c(1L, "day"),
+      week  = c(7L, "day"),
+      month = c(1L, "month"),
+      year  = c(1L, "year")
+    )
+    if (!aggregation %in% names(agg)) {
+      return(list(good = FALSE, status = 400L, err = "aggregation must be one of: day, week, month, year"))
+    }
+    agg_period <- as.integer(agg[[aggregation]][1])
+    agg_unit   <- agg[[aggregation]][2]
+
+    aoi_geom <- get_area_geometry(id)
+    if (is.null(aoi_geom)) {
+      return(list(good = FALSE, status = 404L, err = "Area not found"))
+    }
+
+    stats <- compute_precipitation_series(
+      aoi_sf = aoi_geom, date_from = date_from, date_to = date_to,
+      aggregation_period = agg_period, aggregation_unit = agg_unit
+    )
+    insert_precipitation_series(id, date_from, date_to, source, aggregation, stats)
+    list(good = TRUE, result = list(
+      area_id = id, date_from = date_from, date_to = date_to,
+      aggregation = aggregation, source = source, data = stats
+    ))
+  }, error = function(e) {
+    message(sprintf("Precipitation failed for area %s: %s", id, conditionMessage(e)))
+    list(good = FALSE, status = 500L, err = conditionMessage(e))
+  })
+}
+
+#* @then
+function(response, result) {
+  body <- response$body
+  if (!isTRUE(body$good)) {
+    response$status <- body$status %||% 500L
+    response$body <- list(detail = body$err)
+    return(Break)
+  }
+  response$body <- body$result
+  Next
+}
+
+#* Get a cached precipitation time series
+#* @get /api/precipitation/<id:integer>
+#* @serializer unboxedJSON
+#* @query date_from:string* Start of the period
+#* @query date_to:string* End of the period
+#* @query aggregation:string("month") Aggregation level
+#* @query source:string("open-meteo") Data source
+#* @response 200:object Cached precipitation time series
+#* @response 404:object No cached series for these parameters
+function(id, query) {
+  date_from <- query$date_from
+  date_to   <- query$date_to
+  if (is.null(date_from) || is.null(date_to)) {
+    reqres::abort_status(400, detail = "date_from and date_to query parameters are required")
+  }
+  aggregation <- query$aggregation %||% "month"
+  source      <- query$source %||% "open-meteo"
+
+  cached <- get_precipitation_cache(id, date_from, date_to, source, aggregation)
+  if (is.null(cached)) {
+    reqres::abort_status(404, detail = "No cached precipitation data found. POST /api/precipitation/<id> to compute it first.")
+  }
+  list(
+    area_id = id, date_from = date_from, date_to = date_to,
+    aggregation = aggregation, source = source,
+    data = cached[, c("date", "precip_total", "precip_days")]
+  )
 }
 
 #* List cached satellite image metadata without contacting CDSE

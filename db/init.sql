@@ -40,9 +40,24 @@ CREATE TABLE satellite_images (
     created_at      TIMESTAMPTZ DEFAULT NOW()
 );
 
+CREATE TABLE precipitation_time_series (
+    id            SERIAL PRIMARY KEY,
+    area_id       INTEGER REFERENCES areas(id) ON DELETE CASCADE,
+    date          DATE NOT NULL,
+    date_from     DATE NOT NULL,
+    date_to       DATE NOT NULL,
+    source        VARCHAR(50) NOT NULL DEFAULT 'open-meteo',
+    aggregation   VARCHAR(20) NOT NULL DEFAULT 'day',
+    precip_total  DOUBLE PRECISION,
+    precip_days   INTEGER,
+    created_at    TIMESTAMPTZ DEFAULT NOW()
+);
+
 CREATE INDEX idx_areas_geom ON areas USING GIST(geom);
 CREATE INDEX idx_ndvi_area_id ON ndvi_time_series(area_id);
 CREATE INDEX idx_satellite_area_id ON satellite_images(area_id);
 CREATE INDEX idx_satellite_area_date ON satellite_images(area_id, collection, image_date);
+CREATE INDEX idx_precipitation_area_id ON precipitation_time_series(area_id);
 CREATE UNIQUE INDEX idx_ndvi_cache ON ndvi_time_series(area_id, date, date_from, date_to, collection, aggregation, resolution);
 CREATE UNIQUE INDEX idx_image_cache ON satellite_images(area_id, collection, scene_id, resolution);
+CREATE UNIQUE INDEX idx_precipitation_cache ON precipitation_time_series(area_id, date, date_from, date_to, source, aggregation);

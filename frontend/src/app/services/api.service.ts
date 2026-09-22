@@ -9,6 +9,8 @@ import {
   Collection,
   NdviRequest,
   ImageRequest,
+  PrecipitationSeries,
+  PrecipitationRequest,
 } from '../models/types';
 
 @Injectable({
@@ -93,5 +95,26 @@ export class ApiService {
 
   getCollections(): Observable<{ data: Collection[] }> {
     return this.http.get<{ data: Collection[] }>(`${this.apiUrl}/collections`);
+  }
+
+  computePrecipitation(areaId: number, request: PrecipitationRequest): Observable<PrecipitationSeries> {
+    return this.http.post<PrecipitationSeries>(
+      `${this.apiUrl}/precipitation/${areaId}`,
+      request
+    );
+  }
+
+  getPrecipitation(
+    areaId: number,
+    dateFrom: string,
+    dateTo: string,
+    aggregation: string
+  ): Observable<PrecipitationSeries> {
+    const params = {
+      date_from: dateFrom,
+      date_to: dateTo,
+      aggregation,
+    };
+    return this.http.get<PrecipitationSeries>(`${this.apiUrl}/precipitation/${areaId}`, { params });
   }
 }

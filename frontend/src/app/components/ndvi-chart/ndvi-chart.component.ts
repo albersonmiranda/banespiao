@@ -6,13 +6,14 @@ import {
   EventEmitter,
   OnChanges,
   SimpleChanges,
+  ViewChild,
 } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { BaseChartDirective } from 'ng2-charts';
 import { ChartConfiguration, ChartData } from 'chart.js';
 import { ApiService } from '../../services/api.service';
-import { NdviDataPoint } from '../../models/types';
+import { NdviDataPoint, NdviTimeSeries, PrecipitationDataPoint, PrecipitationSeries } from '../../models/types';
 
 @Component({
   selector: 'app-ndvi-chart',
@@ -51,6 +52,19 @@ import { NdviDataPoint } from '../../models/types';
 
         <div class="control-row">
           <div class="form-group" style="flex: 1;">
+            <label for="ndvi-provider">Fonte</label>
+            <select
+              id="ndvi-provider"
+              [(ngModel)]="provider"
+              (ngModelChange)="changeProvider($event)"
+              [disabled]="loading || precipLoading"
+              aria-label="Fonte de dados"
+            >
+              <option value="cdse">CDSE (Sentinel Hub)</option>
+              <option value="inpe">INPE</option>
+            </select>
+          </div>
+          <div class="form-group" style="flex: 1;">
             <label for="ndvi-collection">Satélite</label>
             <select
               id="ndvi-collection"
@@ -59,8 +73,7 @@ import { NdviDataPoint } from '../../models/types';
               [disabled]="loading"
               aria-label="Coleção de satélite"
             >
-              <option value="sentinel-2-l2a">Sentinel-2 L2A</option>
-              <option value="landsat-ot-l1">Landsat 8-9 OLI/TIRS L1</option>
+              <option *ngFor="let option of ndviCollections" [ngValue]="option.id">{{ option.label }}</option>
             </select>
           </div>
           <div class="form-group" style="flex: 1;">
@@ -111,6 +124,50 @@ import { NdviDataPoint } from '../../models/types';
             </span>
           </button>
         </div>
+
+        <div class="control-row toggles" [class.disabled]="loading">
+          <span class="toggle-group-label">Exibir no gráfico:</span>
+          <label class="toggle-item">
+            <input
+              type="checkbox"
+              [(ngModel)]="showMax"
+              (change)="refreshChart()"
+              [disabled]="loading"
+              aria-label="Mostrar linha de NDVI máximo" />
+            <span class="toggle-color" style="background: #4bc04b;"></span>
+            Máx
+          </label>
+          <label class="toggle-item">
+            <input
+              type="checkbox"
+              [(ngModel)]="showMean"
+              (change)="refreshChart()"
+              [disabled]="loading"
+              aria-label="Mostrar linha de NDVI médio" />
+            <span class="toggle-color" style="background: #4a90d9;"></span>
+            Média
+          </label>
+          <label class="toggle-item">
+            <input
+              type="checkbox"
+              [(ngModel)]="showMin"
+              (change)="refreshChart()"
+              [disabled]="loading"
+              aria-label="Mostrar linha de NDVI mínimo" />
+            <span class="toggle-color" style="background: #d93025;"></span>
+            Mín
+          </label>
+          <label class="toggle-item">
+            <input
+              type="checkbox"
+              [(ngModel)]="showPrecipitation"
+              (change)="togglePrecipitation()"
+              [disabled]="loading"
+              aria-label="Mostrar precipitação no eixo direito" />
+            <span class="toggle-color" style="background: #0284c7;"></span>
+            Precipitação (mm)
+          </label>
+        </div>
       </div>
 
       <div *ngIf="error" class="alert alert-danger" role="alert">
@@ -124,6 +181,10 @@ import { NdviDataPoint } from '../../models/types';
 
       <p *ngIf="loading" class="request-status" role="status" aria-live="polite">
         Consultando dados de NDVI...
+      </p>
+
+      <p *ngIf="precipLoading" class="request-status" role="status" aria-live="polite">
+        Consultando dados de precipitação (Open-Meteo)...
       </p>
 
       <div class="chart-wrapper" *ngIf="chartData">
@@ -142,21 +203,6 @@ import { NdviDataPoint } from '../../models/types';
         </svg>
         <h4>Ainda não há dados de NDVI</h4>
         <p>Configure os parâmetros acima e clique em <strong>Calcular NDVI</strong> para gerar a série temporal do índice de reflectância.</p>
-      </div>
-
-      <div *ngIf="chartData" class="chart-legend">
-        <div class="legend-item">
-          <span class="legend-color" style="background: #4b9e4b;"></span>
-          <span>Máx</span>
-        </div>
-        <div class="legend-item">
-          <span class="legend-color" style="background: #4a90d9;"></span>
-          <span>Média</span>
-        </div>
-        <div class="legend-item">
-          <span class="legend-color" style="background: #d93025;"></span>
-          <span>Mín</span>
-        </div>
       </div>
     </div>
   `,
@@ -349,23 +395,35 @@ import { NdviDataPoint } from '../../models/types';
       color: var(--color-primary);
     }
 
-    .chart-legend {
-      display: flex;
-      justify-content: center;
-      gap: var(--space-6);
-      margin-top: var(--space-4);
-      padding: var(--space-3) 0;
+    .toggles {
+      align-items: center;
+      padding-top: var(--space-1);
     }
 
-    .legend-item {
-      display: flex;
+    .toggle-group-label {
+      font-size: var(--font-size-xs);
+      font-weight: var(--font-weight-medium);
+      color: var(--color-text-tertiary);
+    }
+
+    .toggle-item {
+      display: inline-flex;
       align-items: center;
-      gap: var(--space-2);
+      gap: var(--space-1);
       font-size: var(--font-size-xs);
       color: var(--color-text-secondary);
+      cursor: pointer;
+      user-select: none;
     }
 
-    .legend-color {
+    .toggle-item input[type="checkbox"] {
+      width: 14px;
+      height: 14px;
+      accent-color: var(--color-primary);
+      cursor: pointer;
+    }
+
+    .toggle-color {
       width: 12px;
       height: 12px;
       border-radius: var(--radius-sm);
@@ -409,14 +467,23 @@ export class NdviChartComponent implements OnChanges {
 
   dateFrom = '';
   dateTo = '';
+  provider: 'cdse' | 'inpe' = 'cdse';
   collection = 'sentinel-2-l2a';
   aggregation = 'month';
   resolution = 100;
   loading = false;
+  precipLoading = false;
   error = '';
+  showMax = true;
+  showMean = true;
+  showMin = true;
+  showPrecipitation = false;
 
+  @ViewChild(BaseChartDirective) chart?: BaseChartDirective;
   chartData: ChartData<'line'> | null = null;
   private rawData: NdviDataPoint[] = [];
+  private ndviByDate: Record<string, NdviDataPoint> = {};
+  private precipitationByDate: Record<string, PrecipitationDataPoint> = {};
   chartOptions: ChartConfiguration<'line'>['options'] = {
     responsive: true,
     maintainAspectRatio: false,
@@ -435,18 +502,28 @@ export class NdviChartComponent implements OnChanges {
         callbacks: {
           label: (ctx) => {
             const label = ctx.dataset.label || '';
+            const yAxisID = (ctx.dataset as { yAxisID?: string }).yAxisID;
+            if (yAxisID === 'y1') {
+              return `${label}: ${ctx.parsed.y?.toFixed(1)} mm`;
+            }
             return `${label}: ${ctx.parsed.y?.toFixed(4)}`;
           },
           afterBody: (items) => {
             if (!items.length) return [];
-            const idx = items[0].dataIndex;
-            const point = this.rawData[idx];
-            if (!point) return [];
-            return [
-              `Desvio padrão: ${point.ndvi_stdev?.toFixed(4) ?? '—'}`,
-              `Pixels válidos: ${point.sample_count ?? '—'}`,
-              `Sem dados: ${point.no_data_count ?? '—'}`,
-            ];
+            const point = this.ndviByDate[String(items[0].label)];
+            const lines: string[] = [];
+            if (point) {
+              lines.push(
+                `Desvio padrão: ${point.ndvi_stdev?.toFixed(4) ?? '—'}`,
+                `Pixels válidos: ${point.sample_count ?? '—'}`,
+                `Sem dados: ${point.no_data_count ?? '—'}`
+              );
+            }
+            const precip = this.precipitationByDate[String(items[0].label)];
+            if (precip) {
+              lines.push(`Chuva (mm): ${precip.precip_total?.toFixed(1) ?? '—'}`);
+            }
+            return lines;
           },
         },
       },
@@ -463,6 +540,13 @@ export class NdviChartComponent implements OnChanges {
         ticks: { color: '#94a3b8', font: { size: 11 }, stepSize: 0.2 },
         title: { display: true, text: 'NDVI', color: '#475569', font: { size: 12, weight: 500 } },
       },
+      y1: {
+        position: 'right',
+        min: 0,
+        grid: { drawOnChartArea: false },
+        ticks: { color: '#94a3b8', font: { size: 11 } },
+        title: { display: true, text: 'Precipitação (mm)', color: '#475569', font: { size: 12, weight: 500 } },
+      },
     },
     elements: {
       line: { tension: 0.3 },
@@ -475,13 +559,38 @@ export class NdviChartComponent implements OnChanges {
   }
 
   get availableResolutions(): number[] {
-    return this.collection.startsWith('landsat') ? [30, 100] : [10, 20, 30, 100];
+    const isLandsat = this.collection.toLowerCase().startsWith('landsat');
+    if (this.provider === 'inpe') {
+      return isLandsat ? [30] : [10];
+    }
+    return isLandsat ? [30, 100] : [10, 20, 30, 100];
+  }
+
+  get ndviCollections(): { id: string; label: string }[] {
+    if (this.provider === 'inpe') {
+      return [
+        { id: 'S2-16D-2', label: 'Sentinel-2 L2A (Data Cube 16d)' },
+        { id: 'LANDSAT-16D-1', label: 'Landsat 8-9 (Data Cube 16d)' },
+      ];
+    }
+    return [
+      { id: 'sentinel-2-l2a', label: 'Sentinel-2 L2A' },
+      { id: 'landsat-ot-l1', label: 'Landsat 8-9 OLI/TIRS L1' },
+    ];
   }
 
   onDateChange() {
     this.chartData = null;
     this.rawData = [];
+    this.ndviByDate = {};
+    this.precipitationByDate = {};
     this.error = '';
+  }
+
+  changeProvider(provider: 'cdse' | 'inpe') {
+    this.provider = provider;
+    this.collection = provider === 'inpe' ? 'S2-16D-2' : 'sentinel-2-l2a';
+    this.changeCollection(this.collection);
   }
 
   changeCollection(collection: string) {
@@ -491,6 +600,8 @@ export class NdviChartComponent implements OnChanges {
     }
     this.chartData = null;
     this.rawData = [];
+    this.ndviByDate = {};
+    this.precipitationByDate = {};
     this.error = '';
   }
 
@@ -503,6 +614,8 @@ export class NdviChartComponent implements OnChanges {
       this.setDefaultDates();
       this.chartData = null;
       this.rawData = [];
+      this.ndviByDate = {};
+      this.precipitationByDate = {};
     }
   }
 
@@ -516,31 +629,53 @@ export class NdviChartComponent implements OnChanges {
 
   computeNdvi() {
     if (!this.areaId) return;
+    const areaId = this.areaId;
+    const params = {
+      date_from: this.dateFrom,
+      date_to: this.dateTo,
+      collection: this.collection,
+      aggregation: this.aggregation,
+      resolution: this.resolution,
+    };
 
     this.loading = true;
     this.error = '';
 
     this.api
-      .computeNdvi(this.areaId, {
-        date_from: this.dateFrom,
-        date_to: this.dateTo,
-        collection: this.collection,
-        aggregation: this.aggregation,
-        resolution: this.resolution,
-      })
+      .getNdvi(areaId, params.date_from, params.date_to, params.collection, params.aggregation, params.resolution)
       .subscribe({
         next: (response) => {
+          if (this.areaId !== areaId) return;
           this.loading = false;
-          if (!response || !Array.isArray(response.data)) {
-            this.error = 'A resposta do serviço de NDVI não contém dados válidos';
-            this.chartData = null;
-            return;
-          }
-          this.buildChart(response.data);
-          this.ndviComputed.emit(response.data);
-          this.changeDetector.markForCheck();
+          this.handleNdviResponse(response);
         },
         error: (err) => {
+          if (this.areaId !== areaId) return;
+          if (err.status === 404) {
+            this.computeNdviRemote(areaId, params);
+          } else {
+            this.loading = false;
+            this.error = err.error?.detail || err.error?.error || 'Falha ao consultar NDVI em cache';
+            this.changeDetector.markForCheck();
+          }
+        },
+      });
+  }
+
+  private computeNdviRemote(
+    areaId: number,
+    params: { date_from: string; date_to: string; collection: string; aggregation: string; resolution: number }
+  ) {
+    this.api
+      .computeNdvi(areaId, { ...params, provider: this.provider })
+      .subscribe({
+        next: (response) => {
+          if (this.areaId !== areaId) return;
+          this.loading = false;
+          this.handleNdviResponse(response);
+        },
+        error: (err) => {
+          if (this.areaId !== areaId) return;
           this.loading = false;
           this.error = err.error?.detail || err.error?.error || 'Falha ao calcular NDVI';
           this.changeDetector.markForCheck();
@@ -548,57 +683,179 @@ export class NdviChartComponent implements OnChanges {
       });
   }
 
+  private handleNdviResponse(response: NdviTimeSeries) {
+    if (!response || !Array.isArray(response.data)) {
+      this.error = 'A resposta do serviço de NDVI não contém dados válidos';
+      this.chartData = null;
+      this.changeDetector.markForCheck();
+      return;
+    }
+    this.buildChart(response.data);
+    this.ndviComputed.emit(response.data);
+    if (this.showPrecipitation) {
+      this.loadPrecipitation();
+    }
+    this.changeDetector.markForCheck();
+  }
+
   private buildChart(data: NdviDataPoint[]) {
     if (!data.length) {
       this.chartData = null;
       this.rawData = [];
+      this.ndviByDate = {};
       this.error = 'Nenhum dado de NDVI foi encontrado para o período selecionado';
       return;
     }
 
     this.rawData = data;
-    const dates = data.map((d) => d.date);
-    const means = data.map((d) => d.ndvi_mean);
-    const mins = data.map((d) => d.ndvi_min);
-    const maxs = data.map((d) => d.ndvi_max);
+    this.ndviByDate = {};
+    for (const point of data) {
+      this.ndviByDate[point.date] = point;
+    }
+    this.refreshChart();
+  }
 
-    this.chartData = {
-      labels: dates,
-      datasets: [
-        {
-          label: 'NDVI Max',
-          data: maxs,
-          borderColor: 'rgba(75, 192, 75, 0.8)',
-          backgroundColor: 'rgba(75, 192, 75, 0.1)',
-          borderWidth: 1.5,
-          fill: '+1',
-          tension: 0.3,
-          pointRadius: 2,
-          pointHoverRadius: 4,
-        },
-        {
-          label: 'NDVI Mean',
-          data: means,
-          borderColor: '#4a90d9',
-          backgroundColor: 'rgba(74, 144, 217, 0.15)',
-          borderWidth: 2.5,
-          fill: false,
-          tension: 0.3,
-          pointRadius: 3,
-          pointHoverRadius: 5,
-        },
-        {
-          label: 'NDVI Min',
-          data: mins,
-          borderColor: 'rgba(217, 48, 37, 0.8)',
-          backgroundColor: 'rgba(217, 48, 37, 0.1)',
-          borderWidth: 1.5,
-          fill: false,
-          tension: 0.3,
-          pointRadius: 2,
-          pointHoverRadius: 4,
-        },
-      ],
-    };
+  private rebuildDataset() {
+    if (!this.rawData.length) return null;
+
+    const dates = this.rawData.map((d) => d.date);
+    const datasets: ChartConfiguration<'line'>['data']['datasets'] = [];
+
+    if (this.showMax) {
+      datasets.push({
+        label: 'NDVI Max',
+        data: this.rawData.map((d) => d.ndvi_max),
+        borderColor: 'rgba(75, 192, 75, 0.8)',
+        backgroundColor: 'rgba(75, 192, 75, 0.1)',
+        borderWidth: 1.5,
+        fill: '+1',
+        tension: 0.3,
+        pointRadius: 2,
+        pointHoverRadius: 4,
+      });
+    }
+
+    if (this.showMean) {
+      datasets.push({
+        label: 'NDVI Mean',
+        data: this.rawData.map((d) => d.ndvi_mean),
+        borderColor: '#4a90d9',
+        backgroundColor: 'rgba(74, 144, 217, 0.15)',
+        borderWidth: 2.5,
+        fill: false,
+        tension: 0.3,
+        pointRadius: 3,
+        pointHoverRadius: 5,
+      });
+    }
+
+    if (this.showMin) {
+      datasets.push({
+        label: 'NDVI Min',
+        data: this.rawData.map((d) => d.ndvi_min),
+        borderColor: 'rgba(217, 48, 37, 0.8)',
+        backgroundColor: 'rgba(217, 48, 37, 0.1)',
+        borderWidth: 1.5,
+        fill: false,
+        tension: 0.3,
+        pointRadius: 2,
+        pointHoverRadius: 4,
+      });
+    }
+
+    if (this.showPrecipitation) {
+      datasets.push({
+        label: 'Precipitação',
+        data: dates.map((date) => this.precipitationByDate[date]?.precip_total ?? null),
+        borderColor: 'rgba(2, 132, 199, 0.7)',
+        backgroundColor: 'rgba(2, 132, 199, 0.25)',
+        borderWidth: 1.5,
+        yAxisID: 'y1',
+        fill: true,
+        tension: 0.3,
+        pointRadius: 2,
+        pointHoverRadius: 4,
+        order: 5,
+      });
+    }
+
+    return { labels: dates, datasets };
+  }
+
+  refreshChart() {
+    const built = this.rebuildDataset();
+    this.chartData = built ? (built as ChartData<'line'>) : null;
+    this.chart?.update();
+  }
+
+  togglePrecipitation() {
+    if (this.loading || this.precipLoading) return;
+    this.refreshChart();
+  }
+
+  private loadPrecipitation() {
+    if (!this.areaId) return;
+    const areaId = this.areaId;
+    const dateFrom = this.dateFrom;
+    const dateTo = this.dateTo;
+    const aggregation = this.aggregation;
+
+    this.precipLoading = true;
+    this.showPrecipitation = true;
+    this.error = '';
+
+    this.api.getPrecipitation(areaId, dateFrom, dateTo, aggregation).subscribe({
+      next: (response) => {
+        if (this.areaId !== areaId) return;
+        this.precipLoading = false;
+        this.handlePrecipitationResponse(response);
+      },
+      error: (err) => {
+        if (this.areaId !== areaId) return;
+        if (err.status === 404) {
+          this.computePrecipitationRemote(areaId, dateFrom, dateTo, aggregation);
+        } else {
+          this.precipLoading = false;
+          this.showPrecipitation = false;
+          this.error = err.error?.detail || err.error?.error || 'Falha ao consultar precipitação em cache';
+          this.refreshChart();
+          this.changeDetector.markForCheck();
+        }
+      },
+    });
+  }
+
+  private computePrecipitationRemote(areaId: number, dateFrom: string, dateTo: string, aggregation: string) {
+    this.api.computePrecipitation(areaId, { date_from: dateFrom, date_to: dateTo, aggregation }).subscribe({
+      next: (response) => {
+        if (this.areaId !== areaId) return;
+        this.precipLoading = false;
+        this.handlePrecipitationResponse(response);
+      },
+      error: (err) => {
+        if (this.areaId !== areaId) return;
+        this.precipLoading = false;
+        this.showPrecipitation = false;
+        this.error = err.error?.detail || err.error?.error || 'Falha ao consultar precipitação';
+        this.refreshChart();
+        this.changeDetector.markForCheck();
+      },
+    });
+  }
+
+  private handlePrecipitationResponse(response: PrecipitationSeries) {
+    if (!response || !Array.isArray(response.data)) {
+      this.showPrecipitation = false;
+      this.error = 'A resposta do serviço de precipitação não contém dados válidos';
+      this.refreshChart();
+      this.changeDetector.markForCheck();
+      return;
+    }
+    this.precipitationByDate = {};
+    for (const point of response.data) {
+      this.precipitationByDate[point.date] = point;
+    }
+    this.refreshChart();
+    this.changeDetector.markForCheck();
   }
 }

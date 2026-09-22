@@ -184,3 +184,33 @@ insert_image_record <- function(area_id, collection, scene_id, image_date, cloud
   res <- dbGetQuery(con, query)
   res$id[1]
 }
+
+get_precipitation_cache <- function(area_id, date_from, date_to, source, aggregation) {
+  con <- get_pool()
+  query <- sprintf(
+    "SELECT * FROM precipitation_time_series WHERE area_id = %d AND date_from = '%s' AND date_to = '%s' AND source = '%s' AND aggregation = '%s' ORDER BY date",
+    as.integer(area_id), date_from, date_to, source, aggregation
+  )
+  res <- dbGetQuery(con, query)
+  if (nrow(res) == 0) return(NULL)
+  res
+}
+
+insert_precipitation_series <- function(area_id, date_from, date_to, source, aggregation, stats_df) {
+  con <- get_pool()
+  if (!nrow(stats_df)) return(invisible(NULL))
+  sql_lit <- function(x) {
+    if (length(x) != 1) x <- x[[1]]
+    if (is.na(x) || is.nan(x) || (!is.numeric(x) && toupper(as.character(x)) %in% c("NA", "NAN", "INF", "-INF"))) "NULL" else x
+  }
+  for (i in seq_len(nrow(stats_df))) {
+    row <- stats_df[i, ]
+    query <- sprintf(
+      "INSERT INTO precipitation_time_series (area_id, date, date_from, date_to, source, aggregation, precip_total, precip_days) VALUES (%d, '%s', '%s', '%s', '%s', '%s', %s, %s) ON CONFLICT (area_id, date, date_from, date_to, source, aggregation) DO UPDATE SET precip_total = EXCLUDED.precip_total, precip_days = EXCLUDED.precip_days",
+      as.integer(area_id), as.character(row$date), date_from, date_to, source, aggregation,
+      sql_lit(row$precip_total),
+      sql_lit(row$precip_days)
+    )
+    dbExecute(con, query)
+  }
+}
