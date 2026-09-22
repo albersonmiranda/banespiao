@@ -8,24 +8,31 @@ Protótipo para plataforma de monitoramento de vegetação por imagens de satél
 
 ### Mapa e série temporal de NDVI
 
-Após importação do `.kml`, a área é plotada no mapa Leaflet. O usuário pode então obter a série temporal de NDVI diretamente da API do Copernicus Data Space Ecosystem (CDSE), podendo escolher:
+Após importação do `.kml`, a área é plotada no mapa Leaflet. O usuário pode então obter a série temporal de NDVI a partir de duas fontes:
+
+- **CDSE** (Copernicus Data Space Ecosystem) — via API Statistical
+- **INPE** (catálogo STAC do Brasil) — séries prontas de NDVI dos data cubes do Brazil Data Cube (Sentinel-2 `S2-16D-2` e Landsat `LANDSAT-16D-1`, composições 16 dias) com leitura direta do raster de NDVI, sem cálculo por pixel
+
+Parâmetros disponíveis:
 
 - Intervalo de datas
+- Fonte (CDSE ou INPE)
 - Satélites
   - Sentinel 2
   - Landsat 8-9
 - Resolução
-  - 10m
-  - 20m
-  - 30m
-  - 100m
+  - 10m (INPE Sentinel)
+  - 30m (INPE Landsat)
+  - 10m / 20m / 30m / 100m (CDSE)
 - Agregação
   - Diário
   - Semanal
   - Mensal
   - Anual
 
-O gráfico plotado contém 3 linhas: máximo, média e mínimo. Como é obtido um índice para cada pixel válido na imagem, esses valores se referem, considerando o período de agregação, o valor máximo encontrado, o valor médio e o valor mínimo.
+O gráfico plotado contém 3 linhas: máximo, média e mínimo (cada uma pode ser ligada/desligada). Como é obtido um índice para cada pixel válido na imagem, esses valores se referem, considerando o período de agregação, o valor máximo encontrado, o valor médio e o valor mínimo.
+
+É possível sobrepor a **precipitação** (em mm, eixo direito) usando a API gratuita do **Open-Meteo** (reanálise ERA5/ERA5-Land), ativando o toggle "Precipitação (mm)" no gráfico.
 
 ![Série temporal NDVI.](docs/img/mapa_ndvi.png)
 
@@ -41,6 +48,10 @@ A aplicação permite download e persistência de imagens das seguintes coleçõ
 - Landsat 8-9 OLI/TIRS L1 (CDSE)
   - 30m
   - 100m
+- Sentinel-2 L2A (INPE, `S2_L2A-1`)
+  - 10m
+- Landsat Collection 2 (INPE, `landsat-2`)
+  - 30m
 - CBERS-4A WPM PCA fused (INPE)
   - 2m
 
@@ -58,7 +69,7 @@ banesensor/
 └── docker-compose.yml
 ```
 
-No banco de dados, são guardadas as séries temporais de NDVI e os metadados das imagens. Os `.png` em si são guardados em `/app/uploads` (em um volume anexado, no caso do Railway).
+No banco de dados, são guardadas as séries temporais de NDVI, os metadados das imagens e as séries de precipitação (cache do Open-Meteo). Os `.png` em si são guardados em `/app/uploads` (em um volume anexado, no caso do Railway).
 
 ## Stack
 
@@ -67,12 +78,13 @@ No banco de dados, são guardadas as séries temporais de NDVI e os metadados da
 | Backend    | R 4.6, plumber2, mirai, CDSE, rsi, rstac, sf, terra |
 | Frontend   | Angular 22, Leaflet, Chart.js (ng2-charts) |
 | Banco      | PostgreSQL 16 + PostGIS |
+| Dados      | CDSE (Sentinel Hub), STAC/INPE (BDC + WMS CBERS), Open-Meteo |
 | Infra      | Docker Compose |
 
 ## Pré-requisitos
 
 - Docker e Docker Compose (para build local)
-- Conta gratuita no [Copernicus Data Space Ecosystem](https://dataspace.copernicus.eu/) com credenciais OAuth (client ID e secret)
+- Conta gratuita no [Copernicus Data Space Ecosystem](https://dataspace.copernicus.eu/) com credenciais OAuth (client ID e secret) — necessária apenas para uso das fontes CDSE. As fontes INPE e Open-Meteo são públicas e gratuitas.
 
 ## Variáveis de ambiente
 
@@ -88,6 +100,8 @@ DB_PASSWORD=seu_db_password
 
 ASYNC_WORKERS=4 (mude para 1, caso use um serviço limitado em RAM)
 ```
+
+`CDSE_ID` e `CDSE_SECRET` são opcionais se você usar apenas as fontes INPE e Open-Meteo. As consultas aos catálogos INPE (STAC BDC e WMS CBERS) não exigem chave.
 
 ## Como executar
 
@@ -160,14 +174,21 @@ O projeto é um monorepo com três serviços (`backend/`, `frontend/` e `db/`), 
 
 | Método | Endpoint | Descrição |
 |--------|----------|-----------|
-| `POST` | `/api/ndvi/<id>` | Calcula série temporal de NDVI (assíncrono) |
+| `POST` | `/api/ndvi/<id>` | Calcula série temporal de NDVI (assíncrono; `provider: "cdse"` ou `"inpe"`) |
 | `GET` | `/api/ndvi/<id>` | Retorna série temporal em cache |
+
+### Precipitação
+
+| Método | Endpoint | Descrição |
+|--------|----------|-----------|
+| `POST` | `/api/precipitation/<id>` | Calcula série temporal de precipitação via Open-Meteo (assíncrono) |
+| `GET` | `/api/precipitation/<id>` | Retorna série em cache (`query`: `date_from`, `date_to`, `aggregation`) |
 
 ### Imagens de satélite
 
 | Método | Endpoint | Descrição |
 |--------|----------|-----------|
-| `POST` | `/api/image/<id>` | Sincroniza imagens RGB (assíncrono) |
+| `POST` | `/api/image/<id>` | Sincroniza imagens RGB (assíncrono; `provider: "cdse"`, `"inpe"` ou `"cbers"`) |
 | `GET` | `/api/image/<id>` | Lista metadados das imagens em cache |
 | `GET` | `/api/image/<id>/file/<image_id>` | Retorna imagem PNG |
 
@@ -179,9 +200,16 @@ O projeto é um monorepo com três serviços (`backend/`, `frontend/` e `db/`), 
 
 ## Coleções suportadas
 
-- **Sentinel-2 L2A** (`sentinel-2-l2a`) — MSI, correção atmosférica
-- **Landsat 8-9 Collection 2 L2** (`landsat-c2-l2`) — OLI/TIRS, reflectância superficial
-- **CBERS-4A WPM** (`CB4A-WPM-PCA-FUSED-1`) — via STAC/INPE
+**NDVI (série temporal):**
+
+- **Sentinel-2 L2A** (`sentinel-2-l2a` via CDSE / `S2-16D-2` data cube 16d via INPE) — MSI, correção atmosférica
+- **Landsat** (`landsat-c2-l2` via CDSE / `LANDSAT-16D-1` data cube 16d via INPE) — OLI/TIRS, reflectância superficial
+
+**Imagens de satélite (download):**
+
+- **Sentinel-2 L2A** (`sentinel-2-l2a` via CDSE / `S2_L2A-1` via INPE) — MSI, correção atmosférica
+- **Landsat 8-9 Collection 2** (`landsat-c2-l2` via CDSE / `landsat-2` via INPE) — OLI/TIRS, reflectância superficial
+- **CBERS-4A WPM** (`CB4A-WPM-PCA-FUSED-1`) — via STAC/WMS INPE
 
 ## Banco de dados
 
@@ -189,4 +217,7 @@ Tabelas principais:
 
 - `areas` — Áreas de interesse com geometria PostGIS
 - `ndvi_time_series` — Séries temporais de NDVI
+- `precipitation_time_series` — Séries temporais de precipitação (cache do Open-Meteo)
 - `satellite_images` — Metadados das imagens de satelite baixadas
+
+> Em bancos que já executaram o `init.sql` anterior à adição da precipitação, aplique o arquivo `db/migrations/2026.09.18_precipitation.sql` para criar a tabela.
