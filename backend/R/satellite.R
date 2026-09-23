@@ -8,15 +8,20 @@ get_catalog_value <- function(row, candidates, default = NA_character_) {
   if (length(value) == 0 || is.na(value)) default else as.character(value)
 }
 
-get_display_pixels <- function(aoi_sf, long_side = 1600L) {
-  bbox <- sf::st_bbox(sf::st_transform(aoi_sf, 3857))
+check_resolution_fits <- function(aoi_sf, resolution, buffer = 10) {
+  geom <- sf::st_geometry(aoi_sf)
+  if (buffer > 0) geom <- sf::st_buffer(geom, dist = buffer)
+  bbox <- sf::st_bbox(sf::st_transform(geom, 3857))
   width <- max(as.numeric(bbox["xmax"] - bbox["xmin"]), 1)
   height <- max(as.numeric(bbox["ymax"] - bbox["ymin"]), 1)
-  if (width >= height) {
-    c(long_side, max(1L, round(long_side * height / width)))
-  } else {
-    c(max(1L, round(long_side * width / height)), long_side)
+  dims <- ceiling(c(width, height) / resolution)
+  if (any(dims > 2500L)) {
+    stop(sprintf(
+      "A resolução requerida de %d m produziria uma imagem de %d x %d px, excedendo o limite do CDSE de 2500 px por lado. Aumente a resolução, reduza a área ou selecione outra fonte de dados.",
+      resolution, dims[1], dims[2]
+    ))
   }
+  invisible(dims)
 }
 
 get_image_series <- function(aoi_sf, area_id, collection = "sentinel-2-l2a",
@@ -37,7 +42,7 @@ get_image_series <- function(aoi_sf, area_id, collection = "sentinel-2-l2a",
   dir.create(output_dir, recursive = TRUE, showWarnings = FALSE)
   cached <- get_image_cache(area_id, collection, date_from, date_to, resolution)
   cached_paths <- if (is.null(cached)) character(0) else setNames(as.character(cached$image_path), as.character(cached$scene_id))
-  display_pixels <- get_display_pixels(aoi_sf)
+  check_resolution_fits(aoi_sf, resolution, buffer = 10)
   rgb_script <- make_rgb_evalscript(
     constellation = ifelse(grepl("sentinel", collection), "sentinel-2", "landsat")
   )
@@ -54,7 +59,7 @@ get_image_series <- function(aoi_sf, area_id, collection = "sentinel-2-l2a",
       cloud_cover <- suppressWarnings(as.numeric(get_catalog_value(row, c("tileCloudCover", "cloudCover"), NA_character_)))
       satellite <- get_catalog_value(row, c("satellite", "platform", "constellation"), "unknown")
       safe_scene <- gsub("[^A-Za-z0-9_.-]", "_", scene_id)
-      output_file <- file.path(output_dir, sprintf("rgb_%s_%s_%dp.png", area_id, safe_scene, max(display_pixels)))
+      output_file <- file.path(output_dir, sprintf("rgb_%s_%s_%dm.png", area_id, safe_scene, resolution))
 
       if (identical(unname(cached_paths[scene_id]), output_file) && file.exists(output_file)) next
 
@@ -67,7 +72,7 @@ get_image_series <- function(aoi_sf, area_id, collection = "sentinel-2-l2a",
           file = output_file,
           format = "image/png",
           mosaicking_order = "leastCC",
-          pixels = display_pixels,
+          resolution = resolution,
           buffer = 10,
           client = client
         )
@@ -90,38 +95,10 @@ cleanup_area_images <- function(area_id) {
 }
 
 make_rgb_evalscript <- function(constellation = "sentinel-2") {
-  if (constellation == "sentinel-2") {
-    "//VERSION=3
-function setup() {
-  return {
-    input: ['B04', 'B03', 'B02', 'dataMask'],
-    output: { bands: 4, sampleType: 'AUTO' }
-  };
-}
-
-function evaluatePixel(smp) {
-  let rgbLin = [2.5 * smp.B04, 2.5 * smp.B03, 2.5 * smp.B02];
-  return [sRGB(rgbLin[0]), sRGB(rgbLin[1]), sRGB(rgbLin[2]), smp.dataMask];
-}
-
-function sRGB(v) {
-  return v <= 0.0031308 ? 12.92 * v : 1.055 * Math.pow(v, 1.0 / 2.4) - 0.055;
-}"
+  filename <- if (constellation == "sentinel-2") {
+    "TrueColor_S2_evalscript.js"
   } else {
-    "//VERSION=3
-function setup() {
-  return {
-    input: ['B04', 'B03', 'B02', 'dataMask'],
-    output: { bands: 4 }
-  };
-}
-
-function evaluatePixel(smp) {
-  return [sRGB(smp.B04), sRGB(smp.B03), sRGB(smp.B02), smp.dataMask];
-}
-
-function sRGB(v) {
-  return v <= 0.0031308 ? 12.92 * v : 1.055 * Math.pow(v, 1.0 / 2.4) - 0.055;
-}"
+    "TrueColor_Landsat_evalscript.js"
   }
+  read_evalscript(filename)
 }
