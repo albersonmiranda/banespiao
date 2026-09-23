@@ -5,6 +5,7 @@ import { KmlUploadComponent } from '../kml-upload/kml-upload.component';
 import { MapViewComponent } from '../map-view/map-view.component';
 import { NdviChartComponent } from '../ndvi-chart/ndvi-chart.component';
 import { SatelliteImageComponent } from '../satellite-image/satellite-image.component';
+import { CropYieldComponent } from '../crop-yield/crop-yield.component';
 import { ApiService } from '../../services/api.service';
 import { Area } from '../../models/types';
 
@@ -18,6 +19,7 @@ import { Area } from '../../models/types';
     MapViewComponent,
     NdviChartComponent,
     SatelliteImageComponent,
+    CropYieldComponent,
   ],
   template: `
     <div class="report-layout">
@@ -177,6 +179,22 @@ import { Area } from '../../models/types';
               </section>
             </aside>
           </div>
+
+          <section class="panel crop-panel" aria-labelledby="crop-title">
+            <header class="panel-header">
+              <h2 id="crop-title" class="panel-title">
+                <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M10 2v8L4.5 19a2 2 0 0 0 1.8 3h11.4a2 2 0 0 0 1.8-3L14 10V2"></path>
+                  <path d="M8.5 2h7"></path>
+                  <path d="M7 16h10"></path>
+                </svg>
+                Estimativa de Produção (IBGE)
+              </h2>
+            </header>
+            <div class="panel-body">
+              <app-crop-yield [areaId]="selectedAreaId"></app-crop-yield>
+            </div>
+          </section>
         </div>
 
         <div *ngIf="!selectedAreaId && areas.length === 0" class="empty-state animate-slide-up">
@@ -538,6 +556,10 @@ import { Area } from '../../models/types';
 
     .map-panel {
       min-height: 600px;
+    }
+
+    .crop-panel {
+      margin-top: var(--space-6);
     }
 
     .side-panels {

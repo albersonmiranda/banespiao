@@ -87,3 +87,43 @@ export interface PrecipitationRequest {
   aggregation: string;
   source?: string;
 }
+
+export interface CropProduct {
+  code: number;
+  name: string;
+  unit: 'kg/ha' | 'frutos/ha';
+  sack_kg?: number | null;
+}
+
+export interface CropProductsResponse {
+  data: CropProduct[];
+  latest_year: number;
+  min_year: number;
+}
+
+export interface CropYieldEstimate {
+  area_id: number;
+  product_code: number;
+  product_name: string;
+  years: number[];
+  n_years: number;
+  municipality_code: number;
+  municipality_name: string;
+  uf: string;
+  area_ha: number;
+  yield_value: number;
+  yield_unit: 'kg/ha' | 'frutos/ha' | 'sacas/ha';
+  total: number;
+  total_tons: number | null;
+  total_mil_frutos: number | null;
+  value_total?: number;
+  price_per_unit?: number;
+  price_unit?: string;
+  value_years?: number;
+  created_at?: string;
+}
+
+export interface CropRequest {
+  product_code: number;
+  years: number[];
+}

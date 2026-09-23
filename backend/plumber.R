@@ -11,6 +11,7 @@
 #* @tag areas Area management
 #* @tag ndvi Vegetation index time series
 #* @tag imagery Satellite imagery
+#* @tag crop Crop yield estimation
 "_API"
 
 library(plumber2)
@@ -23,6 +24,7 @@ source("R/satellite.R", local = TRUE)
 source("R/cbers.R", local = TRUE)
 source("R/inpe.R", local = TRUE)
 source("R/precipitation.R", local = TRUE)
+source("R/crop.R", local = TRUE)
 
 ensure_upload_dir()
 start_async_workers()
@@ -448,6 +450,125 @@ function() {
       )
     )
   })
+}
+
+#* List supported cultivations for crop yield estimation (IBGE PAM)
+#* @get /api/crop/products
+#* @serializer unboxedJSON
+#* @response 200:object Supported cultivations
+function() {
+  crop_products_payload()
+}
+
+crop_estimate_payload <- function(x) {
+  out <- list(
+    area_id           = x$area_id,
+    product_code      = x$product_code,
+    product_name      = x$product_name,
+    years             = as.list(as.integer(x$years)),
+    n_years           = as.integer(x$n_years),
+    municipality_code = x$municipality_code,
+    municipality_name = x$municipality_name,
+    uf                = x$uf,
+    area_ha           = x$area_ha,
+    yield_value       = x$yield_value,
+    yield_unit        = x$yield_unit,
+    total             = x$total,
+    total_tons        = x$total_tons,
+    total_mil_frutos  = x$total_mil_frutos,
+    value_total       = x$value_total,
+    price_per_unit    = x$price_per_unit,
+    price_unit        = x$price_unit,
+    value_years       = x$value_years,
+    created_at        = x$created_at
+  )
+  keep <- vapply(out, function(v) !is.null(v) && !all(is.na(v)), logical(1))
+  out[keep]
+}
+
+format_crop_estimate <- function(row) {
+  years <- suppressWarnings(as.integer(strsplit(row$years, ",", fixed = TRUE)[[1]]))
+  crop_estimate_payload(list(
+    area_id = row$area_id, product_code = row$product_code,
+    product_name = row$product_name, years = years, n_years = row$n_years,
+    municipality_code = row$municipality_code, municipality_name = row$municipality_name,
+    uf = row$uf, area_ha = row$area_ha, yield_value = row$yield_value,
+    yield_unit = row$yield_unit, total = row$total, total_tons = row$total_tons,
+    total_mil_frutos = row$total_mil_frutos, value_total = row$value_total,
+    price_per_unit = row$price_per_unit,
+    price_unit = if (isTRUE(row$yield_unit == "frutos/ha")) "R$/mil frutos"
+                 else if (isTRUE(row$yield_unit == "sacas/ha")) "R$/saca" else "R$/t",
+    value_years = row$value_years,
+    created_at = row$created_at
+  ))
+}
+
+#* Estimate the crop yield for an area from IBGE average yield per hectare
+#*
+#* Resolves the municipality from the area coordinates, fetches the average
+#* yield (IBGE PAM table 5457, rendimento médio) for each of the requested
+#* years, averages the years that have data and multiplies the average by the
+#* area in hectares. Runs asynchronously and caches the result. Units follow
+#* IBGE: kg/ha (plus tons) or frutos/ha (abacaxi/coco).
+#* @post /api/crop/<id:integer>
+#* @serializer unboxedJSON
+#* @async
+#* @body product_code:integer Product code (see GET /api/crop/products)
+#* @body years:[integer] Reference years (1974 to latest PAM release); the
+#*       estimate is based on the average yield across these years
+#* @response 200:object Crop yield estimate
+#* @response 404:object Unknown area
+#* @response 500:object Processing error
+function(id, body) {
+  suppressMessages({ library(DBI); library(RPostgres); library(sf) })
+  tryCatch({
+    product_code <- body[["product_code"]]
+    years <- suppressWarnings(as.integer(body[["years"]]))
+    if (is.null(product_code) || !length(years) || all(is.na(years))) {
+      return(list(good = FALSE, status = 400L, err = "product_code and a non-empty years array are required"))
+    }
+    years <- years[!is.na(years)]
+    result <- compute_crop_estimate(id, product_code, years)
+    list(good = TRUE, result = crop_estimate_payload(result))
+  }, error = function(e) {
+    message(sprintf("Crop estimate failed for area %s: %s", id, conditionMessage(e)))
+    list(good = FALSE, status = 500L, err = conditionMessage(e))
+  })
+}
+
+#* @then
+function(response, result) {
+  body <- response$body
+  if (!isTRUE(body$good)) {
+    response$status <- body$status %||% 500L
+    response$body <- list(detail = body$err)
+    return(Break)
+  }
+  response$body <- body$result
+  Next
+}
+
+#* Get a cached crop yield estimate for an area
+#* @get /api/crop/<id:integer>
+#* @serializer unboxedJSON
+#* @query product_code:integer Product code (required)
+#* @query years:[integer] Reference years, e.g. "years=2023,2024,2025" (required)
+#* @response 200:object Cached crop yield estimate
+#* @response 404:object No cached estimate for these parameters
+function(id, query) {
+  if (is.null(query$product_code) || is.null(query$years)) {
+    reqres::abort_status(400, detail = "product_code and years query parameters are required")
+  }
+  years <- as.integer(query$years)
+  years <- years[!is.na(years)]
+  if (!length(years)) {
+    reqres::abort_status(400, detail = "years must be a comma-separated list of year numbers, e.g. years=2023,2024,2025")
+  }
+  cached <- get_crop_estimate_cache(id, query$product_code, years)
+  if (is.null(cached)) {
+    reqres::abort_status(404, detail = "No cached crop yield estimate found. POST /api/crop/<id> to compute it first.")
+  }
+  format_crop_estimate(cached)
 }
 
 `%||%` <- function(a, b) if (is.null(a)) b else a

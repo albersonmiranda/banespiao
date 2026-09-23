@@ -185,6 +185,18 @@ insert_image_record <- function(area_id, collection, scene_id, image_date, cloud
   res$id[1]
 }
 
+delete_image_record <- function(area_id, collection, scene_id, resolution) {
+  con <- get_pool()
+  rows <- DBI::dbGetQuery(
+    con,
+    "DELETE FROM satellite_images WHERE area_id = $1 AND collection = $2 AND scene_id = $3 AND resolution = $4 RETURNING image_path",
+    params = list(as.integer(area_id), collection, scene_id, as.integer(resolution))
+  )
+  paths <- as.character(rows$image_path)
+  if (length(paths)) unlink(paths[!is.na(paths) & nzchar(paths)])
+  invisible(nrow(rows))
+}
+
 get_precipitation_cache <- function(area_id, date_from, date_to, source, aggregation) {
   con <- get_pool()
   query <- sprintf(
@@ -194,6 +206,106 @@ get_precipitation_cache <- function(area_id, date_from, date_to, source, aggrega
   res <- dbGetQuery(con, query)
   if (nrow(res) == 0) return(NULL)
   res
+}
+
+get_area_area_ha <- function(id) {
+  con <- get_pool()
+  query <- sprintf(
+    "SELECT ST_Area(geom::geography) / 10000.0 AS area_ha FROM areas WHERE id = %d",
+    as.integer(id)
+  )
+  res <- dbGetQuery(con, query)
+  if (nrow(res) == 0) return(NULL)
+  as.numeric(res$area_ha[1])
+}
+
+get_municipality_at <- function(wkt_point) {
+  con <- get_pool()
+  query <- sprintf(
+    "SELECT code, name, uf FROM ibge_municipalities WHERE ST_Contains(geom, ST_SetSRID(ST_GeomFromText('%s'), 4326)) LIMIT 1",
+    gsub("'", "''", wkt_point)
+  )
+  res <- dbGetQuery(con, query)
+  if (nrow(res) == 0) return(NULL)
+  list(
+    code = unname(res$code[[1]]),
+    name = unname(res$name[[1]]),
+    uf   = unname(res$uf[[1]])
+  )
+}
+
+count_municipalities <- function() {
+  con <- get_pool()
+  as.numeric(dbGetQuery(con, "SELECT COUNT(*) AS n FROM ibge_municipalities")$n[[1]])
+}
+
+insert_municipality <- function(code, name, uf, wkt) {
+  con <- get_pool()
+  dbExecute(
+    con,
+    sprintf(
+      "INSERT INTO ibge_municipalities (code, name, uf, geom) VALUES (%d, '%s', '%s', ST_GeomFromText('%s', 4326)) ON CONFLICT (code) DO UPDATE SET name = EXCLUDED.name, uf = EXCLUDED.uf, geom = EXCLUDED.geom",
+      as.integer(code),
+      gsub("'", "''", name),
+      gsub("'", "''", uf),
+      gsub("'", "''", wkt)
+    )
+  )
+  invisible(NULL)
+}
+
+clear_municipalities <- function() {
+  con <- get_pool()
+  dbExecute(con, "TRUNCATE TABLE ibge_municipalities")
+  invisible(NULL)
+}
+
+get_crop_products <- function() {
+  con <- get_pool()
+  dbGetQuery(con, "SELECT code, name, unit, sack_kg FROM crop_products WHERE active = TRUE ORDER BY code")
+}
+
+# Renders a sorted INTEGER[] literal used both for the cache lookup and insert,
+# keeping the UNIQUE(area_id, product_code, years) constraint canonical.
+years_array_lit <- function(years) {
+  years <- sort(unique(as.integer(years)))
+  paste0("ARRAY[", paste(years, collapse = ","), "]")
+}
+
+get_crop_estimate_cache <- function(area_id, product_code, years) {
+  con <- get_pool()
+  query <- sprintf(
+    "SELECT area_id, product_code, product_name, array_to_string(years, ',') AS years, n_years, municipality_code, municipality_name, uf, area_ha, yield_value, yield_unit, total, total_tons, total_mil_frutos, value_total, price_per_unit, value_years, created_at FROM crop_yield_estimates WHERE area_id = %d AND product_code = %d AND years = %s",
+    as.integer(area_id), as.integer(product_code), years_array_lit(years)
+  )
+  res <- dbGetQuery(con, query)
+  if (nrow(res) == 0) return(NULL)
+  res
+}
+
+insert_crop_estimate <- function(area_id, product_code, product_name, years, muni, area_ha, yield_value, yield_unit, total, total_tons, total_mil_frutos, value_total = NULL, price_per_unit = NULL, value_years = NULL) {
+  con <- get_pool()
+  sql_lit <- function(x) {
+    if (is.null(x)) return("NULL")
+    if (length(x) != 1) x <- x[[1]]
+    if (is.na(x) || is.nan(x) || (!is.numeric(x) && toupper(as.character(x)) %in% c("NA", "NAN", "INF", "-INF"))) "NULL" else x
+  }
+  years <- sort(unique(as.integer(years)))
+  n_years <- length(years)
+  query <- sprintf(
+    "INSERT INTO crop_yield_estimates (area_id, product_code, product_name, years, n_years, municipality_code, municipality_name, uf, area_ha, yield_value, yield_unit, total, total_tons, total_mil_frutos, value_total, price_per_unit, value_years) VALUES (%d, %d, '%s', %s, %d, %s, %s, %s, %s, %s, '%s', %s, %s, %s, %s, %s, %s) ON CONFLICT (area_id, product_code, years) DO UPDATE SET product_name = EXCLUDED.product_name, n_years = EXCLUDED.n_years, municipality_code = EXCLUDED.municipality_code, municipality_name = EXCLUDED.municipality_name, uf = EXCLUDED.uf, area_ha = EXCLUDED.area_ha, yield_value = EXCLUDED.yield_value, yield_unit = EXCLUDED.yield_unit, total = EXCLUDED.total, total_tons = EXCLUDED.total_tons, total_mil_frutos = EXCLUDED.total_mil_frutos, value_total = EXCLUDED.value_total, price_per_unit = EXCLUDED.price_per_unit, value_years = EXCLUDED.value_years",
+    as.integer(area_id), as.integer(product_code),
+    gsub("'", "''", product_name), years_array_lit(years), n_years,
+    sql_lit(muni$code),
+    sprintf("'%s'", gsub("'", "''", muni$name)),
+    sprintf("'%s'", gsub("'", "''", muni$uf)),
+    sql_lit(area_ha), sql_lit(yield_value),
+    gsub("'", "''", yield_unit),
+    sql_lit(total), sql_lit(total_tons), sql_lit(total_mil_frutos),
+    sql_lit(value_total), sql_lit(price_per_unit), sql_lit(value_years)
+  )
+  dbExecute(con, query)
+  invisible(NULL)
 }
 
 insert_precipitation_series <- function(area_id, date_from, date_to, source, aggregation, stats_df) {

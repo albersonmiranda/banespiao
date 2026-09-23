@@ -11,6 +11,10 @@ import {
   ImageRequest,
   PrecipitationSeries,
   PrecipitationRequest,
+  CropProduct,
+  CropProductsResponse,
+  CropYieldEstimate,
+  CropRequest,
 } from '../models/types';
 
 @Injectable({
@@ -116,5 +120,25 @@ export class ApiService {
       aggregation,
     };
     return this.http.get<PrecipitationSeries>(`${this.apiUrl}/precipitation/${areaId}`, { params });
+  }
+
+  getCropProducts(): Observable<CropProductsResponse> {
+    return this.http.get<CropProductsResponse>(`${this.apiUrl}/crop/products`);
+  }
+
+  getCropEstimate(
+    areaId: number,
+    productCode: number,
+    years: number[]
+  ): Observable<CropYieldEstimate> {
+    const params = {
+      product_code: String(productCode),
+      years: years.join(','),
+    };
+    return this.http.get<CropYieldEstimate>(`${this.apiUrl}/crop/${areaId}`, { params });
+  }
+
+  computeCropEstimate(areaId: number, request: CropRequest): Observable<CropYieldEstimate> {
+    return this.http.post<CropYieldEstimate>(`${this.apiUrl}/crop/${areaId}`, request);
   }
 }
