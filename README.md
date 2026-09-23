@@ -57,6 +57,17 @@ A aplicação permite download e persistência de imagens das seguintes coleçõ
 
 ![Série temporal de imagens de satélites.](docs/img/satelite.png)
 
+### Estimativa de produção (IBGE PAM)
+
+A aplicação estima a produção esperada de uma área de monitoramento para diferentes cultivos (café, soja, milho, cana, entre outros). O usuário informa o cultivo e seleciona um ou mais anos de referência (múltipla seleção, por padrão os 3 últimos): o sistema:
+
+1. Resolve o **município** da área a partir das coordenadas (malha municipal do IBGE armazenada em PostGIS);
+2. Obtém o **rendimento médio** (kg/ha) do cultivo naquele município para cada ano via API do IBGE (SIDRA, tabela 5457 — Produção Agrícola Municipal) e calcula a **média** dos anos com dados;
+3. Calcula a **área em hectares** e multiplica pelo rendimento médio para obter a **produção estimada** (kg e toneladas; café é convertido para **sacas de 60 kg**; abacaxi e coco em frutos/ha quando o IBGE reportar nesta unidade);
+4. Estima o **valor da produção** (R$): do preço implícito do IBGE (valor da produção ÷ quantidade produzida, valores nominais) obtém o preço médio por tonelada (ou por mil frutos) dos anos selecionados e multiplica pela produção estimada da área.
+
+Os resultados são cacheados no banco e exibidos em um painel dedicado.
+
 ## Arquitetura
 
 ![Serviços no Railway.](docs/img/railway.png)
@@ -69,7 +80,7 @@ banesensor/
 └── docker-compose.yml
 ```
 
-No banco de dados, são guardadas as séries temporais de NDVI, os metadados das imagens e as séries de precipitação (cache do Open-Meteo). Os `.png` em si são guardados em `/app/uploads` (em um volume anexado, no caso do Railway).
+No banco de dados, são guardadas as séries temporais de NDVI, os metadados das imagens, as séries de precipitação (cache do Open-Meteo) e as estimativas de produção agrícola (IBGE), além da malha municipal do IBGE usada para resolver o município a partir das coordenadas. Os `.png` em si são guardados em `/app/uploads` (em um volume anexado, no caso do Railway).
 
 ## Stack
 
@@ -192,6 +203,14 @@ O projeto é um monorepo com três serviços (`backend/`, `frontend/` e `db/`), 
 | `GET` | `/api/image/<id>` | Lista metadados das imagens em cache |
 | `GET` | `/api/image/<id>/file/<image_id>` | Retorna imagem PNG |
 
+### Estimativa de produção
+
+| Método | Endpoint | Descrição |
+|--------|----------|-----------|
+| `GET` | `/api/crop/products` | Lista cultivos suportados (código IBGE PAM, nome, unidade de rendimento) e o último ano disponível |
+| `POST` | `/api/crop/<id>` | Calcula a estimativa de produção e valor (assíncrono; `product_code` e `years` — array de anos — no corpo, média dos anos com dados) |
+| `GET` | `/api/crop/<id>` | Retorna estimativa em cache (`query`: `product_code`, `years=2023,2024,2025`) |
+
 ### Coleções disponíveis
 
 | Método | Endpoint | Descrição |
@@ -209,7 +228,7 @@ O projeto é um monorepo com três serviços (`backend/`, `frontend/` e `db/`), 
 
 - **Sentinel-2 L2A** (`sentinel-2-l2a` via CDSE / `S2_L2A-1` via INPE) — MSI, correção atmosférica
 - **Landsat 8-9 Collection 2** (`landsat-c2-l2` via CDSE / `landsat-2` via INPE) — OLI/TIRS, reflectância superficial
-- **CBERS-4A WPM** (`CB4A-WPM-PCA-FUSED-1`) — via STAC/WMS INPE
+- **CBERS-4A WPM** (`CB4A-WPM-PCA-FUSED-1`) — via STAC/WMS INPE. O catálogo pode devolver duas cenas na mesma data (linhas de órbita adjacentes intersectam a AOI); o backend mantém apenas a primeira cena utilizável por data e descarta renders em branco/`eo:cloud_cover` nulo (a coleção não publica cobertura de nuvens).
 
 ## Banco de dados
 
@@ -219,5 +238,8 @@ Tabelas principais:
 - `ndvi_time_series` — Séries temporais de NDVI
 - `precipitation_time_series` — Séries temporais de precipitação (cache do Open-Meteo)
 - `satellite_images` — Metadados das imagens de satelite baixadas
+- `ibge_municipalities` — Malha municipal simplificada do IBGE (resolução do município a partir das coordenadas)
+- `crop_products` — Catálogo de cultivos suportados (subset da classificação IBGE PAM 782)
+- `crop_yield_estimates` — Estimativas de produção agrícola em cache (IBGE PAM)
 
-> Em bancos que já executaram o `init.sql` anterior à adição da precipitação, aplique o arquivo `db/migrations/2026.09.18_precipitation.sql` para criar a tabela.
+A malha municipal (`ibge_municipalities`) é carregada automaticamente na primeira estimativa e também pode ser pré-carregada via `Rscript backend/scripts/load_municipalities.R` (requer as variáveis de ambiente `DB_*`).
