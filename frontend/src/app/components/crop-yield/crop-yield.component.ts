@@ -12,7 +12,7 @@ import { CropProduct, CropProductsResponse, CropYieldEstimate } from '../../mode
     <div class="crop-container">
       <div class="controls" [class.disabled]="loading">
         <div class="control-row">
-          <div class="form-group" style="flex: 2;">
+          <div class="form-group grow">
             <label for="crop-product">Cultivo</label>
             <select
               id="crop-product"
@@ -24,7 +24,7 @@ import { CropProduct, CropProductsResponse, CropYieldEstimate } from '../../mode
               <option *ngFor="let product of products" [ngValue]="product.code">{{ product.name }}</option>
             </select>
           </div>
-          <div class="form-group" style="flex: 2;">
+          <div class="form-group grow">
             <label for="crop-years">Anos (múltipla seleção)</label>
             <div class="multi-select" #yearsBox>
               <button
@@ -54,11 +54,10 @@ import { CropProduct, CropProductsResponse, CropYieldEstimate } from '../../mode
             </div>
           </div>
           <button
-            class="btn btn-primary"
+            class="btn btn-primary compute-btn"
             data-testid="compute-crop"
             [disabled]="!areaId || loading || !productCode || !selectedYears.length"
-            (click)="loadEstimate()"
-            style="align-self: flex-end; min-width: 160px;">
+            (click)="loadEstimate()">
             <span *ngIf="!loading" class="btn-content">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M10 2v8L4.5 19a2 2 0 0 0 1.8 3h11.4a2 2 0 0 0 1.8-3L14 10V2"></path>
@@ -193,6 +192,16 @@ import { CropProduct, CropProductsResponse, CropYieldEstimate } from '../../mode
       display: flex;
       flex-direction: column;
       gap: var(--space-1);
+    }
+
+    .form-group.grow {
+      flex: 2 1 180px;
+      min-width: 0;
+    }
+
+    .compute-btn {
+      align-self: flex-end;
+      min-width: 160px;
     }
 
     label {
@@ -528,6 +537,42 @@ import { CropProduct, CropProductsResponse, CropYieldEstimate } from '../../mode
 
     .empty-state p strong {
       color: var(--color-primary);
+    }
+
+    @media (max-width: 767px) {
+      .crop-container {
+        padding: var(--space-4);
+      }
+
+      .control-row {
+        align-items: stretch;
+      }
+
+      .control-row .form-group {
+        flex: 1 1 100%;
+        min-width: 0;
+      }
+
+      .compute-btn {
+        width: 100%;
+        min-width: 0;
+      }
+
+      .estimate-total-cols {
+        grid-template-columns: 1fr;
+        gap: var(--space-3);
+      }
+
+      .estimate-total-col + .estimate-total-col {
+        padding-left: 0;
+        border-left: none;
+        padding-top: var(--space-3);
+        border-top: 1px solid var(--color-border-light);
+      }
+
+      .estimate-total-value {
+        font-size: var(--font-size-xl);
+      }
     }
 
     @keyframes fadeIn {

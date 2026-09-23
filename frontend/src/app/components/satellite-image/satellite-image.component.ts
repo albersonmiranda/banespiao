@@ -18,7 +18,7 @@ import { ApiService } from '../../services/api.service';
           <label for="sat-date-to">Até</label>
           <input id="sat-date-to" type="date" [(ngModel)]="dateTo" (ngModelChange)="loadCachedImages()" [min]="dateFrom" [max]="maxDate" [disabled]="loading" aria-label="Data final das imagens" />
         </div>
-        <div class="form-group" style="flex: 1;">
+        <div class="form-group grow">
           <label for="sat-provider">Fonte</label>
           <select
             id="sat-provider"
@@ -32,7 +32,7 @@ import { ApiService } from '../../services/api.service';
             <option value="cbers">CBERS-4A via INPE</option>
           </select>
         </div>
-        <div class="form-group" style="flex: 1;">
+        <div class="form-group grow">
           <label for="sat-collection">Satélite</label>
           <select
             id="sat-collection"
@@ -44,7 +44,7 @@ import { ApiService } from '../../services/api.service';
             <option *ngFor="let option of availableCollections" [ngValue]="option.id">{{ option.label }}</option>
           </select>
         </div>
-        <div class="form-group" style="flex: 1;">
+        <div class="form-group grow">
           <label for="sat-resolution">Resolução (m)</label>
           <select
             id="sat-resolution"
@@ -57,11 +57,11 @@ import { ApiService } from '../../services/api.service';
           </select>
         </div>
         <button
-          class="btn btn-primary"
+          class="btn btn-primary sync-btn"
           data-testid="load-satellite-image"
           [disabled]="!areaId || loading"
-          (click)="loadImage()"
-          style="align-self: flex-end; min-width: 160px;">
+          (click)="loadImage()">
+
           <span *ngIf="!loading" class="btn-content">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <circle cx="12" cy="12" r="10"></circle>
@@ -160,6 +160,16 @@ styles: [`
       display: flex;
       flex-direction: column;
       gap: var(--space-1);
+    }
+
+    .form-group.grow {
+      flex: 1 1 120px;
+      min-width: 0;
+    }
+
+    .sync-btn {
+      align-self: flex-end;
+      min-width: 160px;
     }
 
     label {
@@ -317,6 +327,7 @@ styles: [`
       background: var(--color-bg-secondary);
       aspect-ratio: 16 / 9;
       min-height: 520px;
+      min-width: 0;
     }
 
     .image-wrapper img {
@@ -421,6 +432,24 @@ styles: [`
     }
 
     @media (max-width: 767px) {
+      .image-container {
+        padding: var(--space-4);
+      }
+
+      .controls {
+        align-items: stretch;
+      }
+
+      .controls .form-group {
+        flex: 1 1 100%;
+        min-width: 0;
+      }
+
+      .sync-btn {
+        width: 100%;
+        min-width: 0;
+      }
+
       .image-selector-row {
         align-items: stretch;
         flex-direction: column;
@@ -431,7 +460,11 @@ styles: [`
       }
 
       .image-wrapper {
-        min-height: 280px;
+        min-height: 220px;
+      }
+
+      .metadata {
+        gap: var(--space-3);
       }
     }
 

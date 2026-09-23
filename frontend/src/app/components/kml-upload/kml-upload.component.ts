@@ -374,6 +374,20 @@ styles: [`
       border: 1px solid #fecaca;
       color: #b91c1c;
     }
+
+    @media (max-width: 767px) {
+      .upload-card {
+        padding: var(--space-4);
+      }
+
+      .drop-zone {
+        padding: var(--space-6) var(--space-4);
+      }
+
+      .file-preview {
+        gap: var(--space-2);
+      }
+    }
   `],
 })
 export class KmlUploadComponent {

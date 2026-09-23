@@ -51,7 +51,7 @@ import { NdviDataPoint, NdviTimeSeries, PrecipitationDataPoint, PrecipitationSer
         </div>
 
         <div class="control-row">
-          <div class="form-group" style="flex: 1;">
+          <div class="form-group grow">
             <label for="ndvi-provider">Fonte</label>
             <select
               id="ndvi-provider"
@@ -64,7 +64,7 @@ import { NdviDataPoint, NdviTimeSeries, PrecipitationDataPoint, PrecipitationSer
               <option value="inpe">INPE</option>
             </select>
           </div>
-          <div class="form-group" style="flex: 1;">
+          <div class="form-group grow">
             <label for="ndvi-collection">Satélite</label>
             <select
               id="ndvi-collection"
@@ -76,7 +76,7 @@ import { NdviDataPoint, NdviTimeSeries, PrecipitationDataPoint, PrecipitationSer
               <option *ngFor="let option of ndviCollections" [ngValue]="option.id">{{ option.label }}</option>
             </select>
           </div>
-          <div class="form-group" style="flex: 1;">
+          <div class="form-group grow">
             <label for="ndvi-aggregation">Agregação</label>
             <select
               id="ndvi-aggregation"
@@ -93,7 +93,7 @@ import { NdviDataPoint, NdviTimeSeries, PrecipitationDataPoint, PrecipitationSer
         </div>
 
         <div class="control-row">
-          <div class="form-group" style="flex: 1;">
+          <div class="form-group grow">
             <label for="ndvi-resolution">Resolução (m)</label>
             <select
               id="ndvi-resolution"
@@ -105,11 +105,10 @@ import { NdviDataPoint, NdviTimeSeries, PrecipitationDataPoint, PrecipitationSer
             </select>
           </div>
           <button
-            class="btn btn-primary"
+            class="btn btn-primary compute-btn"
             data-testid="compute-ndvi"
             [disabled]="!areaId || loading"
-            (click)="computeNdvi()"
-            style="align-self: flex-end; min-width: 140px;">
+            (click)="computeNdvi()">
             <span *ngIf="!loading" class="btn-content">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <line x1="18" y1="20" x2="18" y2="10"></line>
@@ -234,6 +233,16 @@ import { NdviDataPoint, NdviTimeSeries, PrecipitationDataPoint, PrecipitationSer
       display: flex;
       flex-direction: column;
       gap: var(--space-1);
+    }
+
+    .form-group.grow {
+      flex: 1 1 120px;
+      min-width: 0;
+    }
+
+    .compute-btn {
+      align-self: flex-end;
+      min-width: 140px;
     }
 
     label {
@@ -453,6 +462,40 @@ import { NdviDataPoint, NdviTimeSeries, PrecipitationDataPoint, PrecipitationSer
       border: 1px solid color-mix(in srgb, var(--color-primary) 14%, transparent);
       border-radius: var(--radius-md);
       font-size: var(--font-size-sm);
+    }
+
+    @media (max-width: 767px) {
+      .chart-container {
+        padding: var(--space-4);
+      }
+
+      .control-row {
+        align-items: stretch;
+      }
+
+      .control-row .form-group {
+        flex: 1 1 100%;
+        min-width: 0;
+      }
+
+      .compute-btn {
+        width: 100%;
+        min-width: 0;
+      }
+
+      .toggles {
+        align-items: flex-start;
+        flex-direction: column;
+      }
+
+      .chart-wrapper {
+        height: 280px;
+        padding: var(--space-3);
+      }
+
+      .empty-state {
+        height: 280px;
+      }
     }
 
     @keyframes fadeIn {

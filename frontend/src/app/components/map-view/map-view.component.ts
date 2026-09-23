@@ -25,6 +25,16 @@ import * as L from 'leaflet';
       border: 1px solid var(--color-border-light);
     }
 
+    @media (max-width: 767px) {
+      :host {
+        min-height: 260px;
+      }
+
+      .map-container {
+        min-height: 260px;
+      }
+    }
+
     :host ::ng-deep .leaflet-container {
       font-family: var(--font-family-base);
       font-size: var(--font-size-sm);
@@ -123,6 +133,8 @@ export class MapViewComponent implements OnChanges, OnDestroy {
     this.map.on('click', () => {
       this.map?.closePopup();
     });
+
+    setTimeout(() => this.map?.invalidateSize(), 0);
   }
 
   private addGeoJsonLayer() {
